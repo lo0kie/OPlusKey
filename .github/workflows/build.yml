@@ -44,7 +44,7 @@ jobs:
       - name: Unpack module zip
         run: |
           mkdir -p dist/artifact
-          cd dist/artifact && unzip -q ../*.zip
+          for z in dist/*.zip; do unzip -q -o "$z" -d dist/artifact; done
 
       - uses: actions/upload-artifact@v7
         with:
