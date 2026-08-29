@@ -42,7 +42,6 @@ uiLog('HTML/JS 开始执行');
 const actionPresets: Array<[string, string, string]> = [
   ['none', 'block', '无操作'],
   ['native', 'settings_backup_restore', '保留原始按键'],
-  ['passthrough', 'double_arrow', '延迟转发按键'],
   ['shell:[ "$(cat /sys/class/leds/white:flash-1/brightness)" -gt 0 ] && (echo none > /sys/class/leds/white:flash-1/trigger; echo 0 > /sys/class/leds/white:flash-1/brightness) || (echo torch > /sys/class/leds/white:flash-1/trigger; echo 200 > /sys/class/leds/white:flash-1/brightness)',
     'flashlight_on',
     '手电筒',

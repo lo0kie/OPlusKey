@@ -132,9 +132,23 @@ export function parse(txt: string): Record<string, string> {
   return result;
 }
 
+/* 旧版侧键无前缀键名：新键名缺失时回退读取（daemon 侧同样兼容） */
+const LEGACY_PLUS_KEYS: Record<string, string> = {
+  plus_single: 'single',
+  plus_double: 'double',
+  plus_long: 'long',
+  plus_long_press_ms: 'long_press_ms',
+  plus_long_repeat: 'long_repeat',
+};
+
 export function applyParsedConfig(parsed: Record<string, string>): void {
   for (const key of Object.keys(DEFAULTS)) {
-    state[key] = parsed[key] ?? DEFAULTS[key];
+    let value = parsed[key];
+    if (value === undefined) {
+      const legacy = LEGACY_PLUS_KEYS[key];
+      if (legacy) value = parsed[legacy];
+    }
+    state[key] = value ?? DEFAULTS[key];
   }
 }
 
