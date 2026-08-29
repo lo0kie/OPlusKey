@@ -107,16 +107,15 @@ if [ ! -f "$CONFIG" ]; then
 
 double_click_ms=300
 long_repeat_interval_ms=300
-longpress_hold_ms=3000
 vibrate=0
 
 # 侧键 (Plus Key)
 plus_enabled=0
-long_press_ms=500
-single=native
-double=none
-long=none
-long_repeat=0
+plus_long_press_ms=500
+plus_single=native
+plus_double=none
+plus_long=none
+plus_long_repeat=0
 
 # 电源键
 power_enabled=0

@@ -27,18 +27,18 @@
 #define INPUT_DIR "/dev/input"
 #define UINPUT_DEVICE "/dev/uinput"
 #define DEFAULT_LONG_PRESS_MS 500
-#define DEFAULT_DOUBLE_CLICK_MS 300
-#define DEFAULT_REPEAT_INTERVAL_MS 300
 #define DEFAULT_VIBRATION 0
 #define MIN_LONG_PRESS_MS 100
 #define MAX_LONG_PRESS_MS 10000
+#define DEFAULT_DOUBLE_CLICK_MS 300
+#define DEFAULT_REPEAT_INTERVAL_MS 300
 #define MIN_DOUBLE_CLICK_MS 100
 #define MAX_DOUBLE_CLICK_MS 2000
 #define MIN_REPEAT_INTERVAL_MS 50
 #define MAX_REPEAT_INTERVAL_MS 5000
-#define DEFAULT_LONGPRESS_HOLD_MS 3000
-#define MIN_LONGPRESS_HOLD_MS 500
-#define MAX_LONGPRESS_HOLD_MS 10000
+/* longpress: 注入的按住时长。固定 3s：必须超过系统识别长按的阈值
+ * （ColorOS 约 3s），不能用按键自身的 long_press_ms（那只是触发阈值） */
+#define LONGPRESS_INJECT_HOLD_MS 3000
 #define ACTION_MAX 512
 #define LOG_MAX_MB 2
 #define MAX_DEVICES 16
@@ -90,7 +90,6 @@ struct config_data {
     struct key_config keys[KID_COUNT];
     int double_click_ms;
     int repeat_interval_ms;
-    int longpress_hold_ms;
     int vibration;
     long long mtime_ns;
     off_t size;
@@ -136,7 +135,6 @@ static struct key_ctx g_keys[KID_COUNT] = {
 };
 static int g_double_click_ms = DEFAULT_DOUBLE_CLICK_MS;
 static int g_repeat_interval_ms = DEFAULT_REPEAT_INTERVAL_MS;
-static int g_longpress_hold_ms = DEFAULT_LONGPRESS_HOLD_MS;
 static int g_vibration = DEFAULT_VIBRATION;
 static int g_moddir_fallback = 0; /* /proc/self/exe 推导失败，退回 DEFAULT_MODDIR */
 static long long g_config_mtime_ns = 0;
@@ -259,13 +257,19 @@ static int is_action_none(const char *action)
     return !action || action[0] == '\0' || strcmp(action, "none") == 0;
 }
 
+/* 不会产生任何效果的动作：无操作 / native（native 作为双击/长按会被
+ * validate_config 改成 none，这里兜底） */
+static int action_is_noop(const char *action)
+{
+    return is_action_none(action) || strcmp(action, "native") == 0;
+}
+
 static void set_key_defaults(struct config_data *c)
 {
     int i;
     memset(c, 0, sizeof(*c));
     c->double_click_ms = DEFAULT_DOUBLE_CLICK_MS;
     c->repeat_interval_ms = DEFAULT_REPEAT_INTERVAL_MS;
-    c->longpress_hold_ms = DEFAULT_LONGPRESS_HOLD_MS;
     c->vibration = DEFAULT_VIBRATION;
     for (i = 0; i < KID_COUNT; i++) {
         struct key_config *k = &c->keys[i];
@@ -297,16 +301,15 @@ static int create_default_config(void)
         "\n"
         "double_click_ms=300\n"
         "long_repeat_interval_ms=300\n"
-        "longpress_hold_ms=3000\n"
         "vibrate=0\n"
         "\n"
         "# 侧键 (Plus Key)\n"
         "plus_enabled=0\n"
-        "long_press_ms=500\n"
-        "single=native\n"
-        "double=none\n"
-        "long=none\n"
-        "long_repeat=0\n"
+        "plus_long_press_ms=500\n"
+        "plus_single=native\n"
+        "plus_double=none\n"
+        "plus_long=none\n"
+        "plus_long_repeat=0\n"
         "\n"
         "# 电源键 (注意: 长按连发会屏蔽系统自带的电源长按菜单)\n"
         "power_enabled=0\n"
@@ -481,15 +484,6 @@ static int parse_config_file(struct config_data *cfg)
             }
             continue;
         }
-        if (strcmp(key, "longpress_hold_ms") == 0) {
-            int v = parse_int_in(value, MIN_LONGPRESS_HOLD_MS, MAX_LONGPRESS_HOLD_MS);
-            if (v >= 0) {
-                cfg->longpress_hold_ms = v;
-            } else {
-                log_msg("CONFIG WARNING: invalid longpress_hold_ms=%s, using %d\n", value, cfg->longpress_hold_ms);
-            }
-            continue;
-        }
         if (strcmp(key, "vibration") == 0 || strcmp(key, "vibrate") == 0) {
             cfg->vibration = parse_bool(value);
             continue;
@@ -593,12 +587,11 @@ static void apply_config(const struct config_data *cfg)
     }
     g_double_click_ms = cfg->double_click_ms;
     g_repeat_interval_ms = cfg->repeat_interval_ms;
-    g_longpress_hold_ms = cfg->longpress_hold_ms;
     g_vibration = cfg->vibration;
     g_config_mtime_ns = cfg->mtime_ns;
     g_config_size = cfg->size;
-    log_msg("CONFIG APPLIED: double_click_ms=%d long_repeat_interval_ms=%d longpress_hold_ms=%d vibrate=%s mtime_ns=%lld size=%lld\n",
-            g_double_click_ms, g_repeat_interval_ms, g_longpress_hold_ms, g_vibration ? "on" : "off",
+    log_msg("CONFIG APPLIED: double_click_ms=%d long_repeat_interval_ms=%d vibrate=%s mtime_ns=%lld size=%lld\n",
+            g_double_click_ms, g_repeat_interval_ms, g_vibration ? "on" : "off",
             g_config_mtime_ns, (long long)g_config_size);
     if (native_changed) {
         g_regrab_needed = 1;
@@ -1127,14 +1120,14 @@ static void uinput_longpress(int code)
     }
     if (pid > 0) {
         g_longpress_child_pid = pid;
-        log_msg("LONGPRESS inject child pid=%d code=%d hold=%dms\n", pid, code, g_longpress_hold_ms);
+        log_msg("LONGPRESS inject child pid=%d code=%d hold=%dms\n", pid, code, LONGPRESS_INJECT_HOLD_MS);
         return;
     }
     /* 子进程执行注入 */
     reset_child_signals();
     {
         int i;
-        int repeats = g_longpress_hold_ms / 100;
+        int repeats = LONGPRESS_INJECT_HOLD_MS / 100;
         struct input_event ev;
         if (repeats < 1) {
             repeats = 1;
@@ -1250,7 +1243,8 @@ static void key_fire_long(struct key_ctx *k, int repeat)
         passthrough_for(k);
         return;
     }
-    if (!repeat) {
+    /* 振动只用于真实动作的反馈：无操作/连发不震 */
+    if (!repeat && !action_is_noop(k->cfg.long_action)) {
         vibration_feedback();
     }
     execute_action(k->cfg.long_action);
@@ -1263,7 +1257,9 @@ static void key_fire_single(struct key_ctx *k)
         passthrough_for(k);
         return;
     }
-    vibration_feedback();
+    if (!action_is_noop(k->cfg.single)) {
+        vibration_feedback();
+    }
     execute_action(k->cfg.single);
 }
 
@@ -1274,7 +1270,9 @@ static void key_fire_double(struct key_ctx *k)
         passthrough_for(k);
         return;
     }
-    vibration_feedback();
+    if (!action_is_noop(k->cfg.double_action)) {
+        vibration_feedback();
+    }
     execute_action(k->cfg.double_action);
 }
 

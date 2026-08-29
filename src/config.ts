@@ -16,11 +16,11 @@ export const KEY_DEFS: KeyDef[] = [
     hint: '「无操作」即屏蔽原始按键。',
     keys: {
       enabled: 'plus_enabled',
-      single: 'single',
-      double: 'double',
-      long: 'long',
-      longMs: 'long_press_ms',
-      repeat: 'long_repeat',
+      single: 'plus_single',
+      double: 'plus_double',
+      long: 'plus_long',
+      longMs: 'plus_long_press_ms',
+      repeat: 'plus_long_repeat',
     },
     defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0' },
   },
@@ -71,7 +71,6 @@ export const KEY_DEFS: KeyDef[] = [
 export const GLOBAL_DEFAULTS: Record<string, string> = {
   double_click_ms: '300',
   long_repeat_interval_ms: '300',
-  longpress_hold_ms: '3000',
   vibrate: '0',
 };
 
@@ -101,7 +100,6 @@ export function buildConfigText(): string {
     '# OPlusKey Remapper',
     `double_click_ms=${clampNum(state.double_click_ms, 100, 2000, 300)}`,
     `long_repeat_interval_ms=${clampNum(state.long_repeat_interval_ms, 50, 5000, 300)}`,
-    `longpress_hold_ms=${clampNum(state.longpress_hold_ms, 500, 10000, 3000)}`,
     `vibrate=${state.vibrate === '1' ? '1' : '0'}`,
     '',
   ];
