@@ -1,0 +1,11 @@
+id=OPlusKey
+name=OPlusKey
+version=v0.0.0-dev
+versionCode=0
+author=lookie
+description=一加 Plus Key / 侧键重映射，支持单击、双击、长按与振动反馈
+webuiIcon=webroot/icon.svg
+actionIcon=launcher.png
+updateJson=https://github.com/lo0kie/OPlusKey/releases/latest/download/update.json
+actionIcon=launcher.png
+webuiIcon=launcher.png

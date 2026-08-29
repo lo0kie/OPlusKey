@@ -1,0 +1,638 @@
+/* OPlusKey WebUI — Material Design 3 Expressive (dark)
+   色彩令牌由 theme.ts 在运行时用 Monet 覆盖，这里的值为默认种子色 #7AA2FF */
+
+:root {
+  /* M3 dark scheme */
+  --md-primary: #a9c7ff;
+  --md-on-primary: #00315e;
+  --md-primary-container: #004885;
+  --md-on-primary-container: #d3e4ff;
+  --md-secondary: #c3c6dd;
+  --md-on-secondary: #2d3042;
+  --md-secondary-container: #44475e;
+  --md-on-secondary-container: #e1e2f9;
+  --md-tertiary: #e0b8d3;
+  --md-tertiary-container: #583f63;
+  --md-on-tertiary-container: #fdd7fa;
+  --md-surface: #111318;
+  --md-surface-dim: #111318;
+  --md-surface-bright: #37393e;
+  --md-surface-container-lowest: #0b0e13;
+  --md-surface-container-low: #191c20;
+  --md-surface-container: #1d2024;
+  --md-surface-container-high: #282a2f;
+  --md-surface-container-highest: #33353a;
+  --md-on-surface: #e2e2e9;
+  --md-on-surface-variant: #c4c6d0;
+  --md-outline: #8e9099;
+  --md-outline-variant: #44474e;
+  --md-error: #ffb4ab;
+  --md-on-error: #690005;
+  --md-error-container: #93000a;
+  --md-inverse-surface: #e2e2e9;
+
+  /* MD3E shape scale */
+  --shape-xs: 8px;
+  --shape-sm: 12px;
+  --shape-md: 16px;
+  --shape-lg: 20px;
+  --shape-xl: 28px;
+  --shape-full: 999px;
+
+  /* MD3E motion: emphasized + springy */
+  --ease-emph: cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-short: 150ms;
+  --dur-med: 280ms;
+  --dur-long: 420ms;
+
+  /* type scale */
+  --font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html {
+  color-scheme: dark !important;
+  background-color: var(--md-surface);
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background-color: var(--md-surface);
+  color: var(--md-on-surface);
+  font-family: var(--font);
+  touch-action: manipulation;
+  padding-top: calc(18px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+/* ---------- typography ---------- */
+
+.hero {
+  padding: 6px 6px 18px;
+}
+
+.title {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.sub {
+  margin-top: 6px;
+  color: var(--md-on-surface-variant);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---------- Material Symbols icon font (subset, inlined) ---------- */
+
+@font-face {
+  font-family: 'Material Symbols Rounded';
+  font-style: normal;
+  font-weight: 400;
+  src: url('./assets/msr.woff2') format('woff2');
+}
+
+.msr {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-block;
+  white-space: nowrap;
+  letter-spacing: normal;
+  text-transform: none;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  vertical-align: -4px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.6px;
+  color: var(--md-primary);
+  margin-bottom: 12px;
+}
+
+/* 层级强调条：卡片主标题 vs 表单行标题 */
+.section-title::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--md-primary);
+  flex: 0 0 auto;
+}
+
+.hint {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--md-outline);
+  margin-top: 12px;
+}
+
+/* ---------- cards (expressive large shape) ---------- */
+
+.card {
+  margin: 12px 0;
+  padding: 20px;
+  border: none;
+  border-radius: var(--shape-xl);
+  background: var(--md-surface-container-low);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.status-card {
+  padding: 16px 20px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--md-on-surface-variant);
+  min-height: 18px;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--md-outline);
+  flex: 0 0 auto;
+  transition: background var(--dur-med) var(--ease-emph);
+}
+
+.dot.ok {
+  background: var(--md-primary);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--md-primary) 60%, transparent);
+}
+
+.dot.bad {
+  background: var(--md-error);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--md-error) 60%, transparent);
+}
+
+/* ---------- form layout ---------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.field {
+  min-width: 0;
+}
+
+.field label {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+input:not([type='checkbox']) {
+  display: block;
+  width: 100%;
+  height: 52px;
+  margin: 0;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--shape-md);
+  background: var(--md-surface-container-high);
+  color: var(--md-on-surface);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: box-shadow var(--dur-short) var(--ease-emph);
+}
+
+input:not([type='checkbox']):focus {
+  box-shadow: 0 0 0 2px var(--md-primary);
+}
+
+/* ---------- MD3 switch ---------- */
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 2px;
+}
+
+/* 卡片内相邻开关行间距 */
+.switch-row + .switch-row {
+  margin-top: 12px;
+}
+
+.switch-info {
+  min-width: 0;
+  padding-right: 14px;
+}
+
+.switch-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--md-on-surface);
+}
+
+.switch-sub {
+  margin-top: 3px;
+  color: var(--md-on-surface-variant);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 32px;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-track {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--shape-full);
+  background: var(--md-surface-container-highest);
+  border: 2px solid var(--md-outline);
+  cursor: pointer;
+  transition:
+    background var(--dur-med) var(--ease-emph),
+    border-color var(--dur-med) var(--ease-emph);
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--md-outline);
+  transition: all var(--dur-med) var(--ease-spring);
+  pointer-events: none;
+}
+
+.switch input:checked + .switch-track {
+  border-color: var(--md-primary);
+  background: var(--md-primary);
+}
+
+.switch input:checked + .switch-track .switch-thumb {
+  /* 轨道有 2px 边框，内区 28px；24px 圆点居中 = 2px */
+  top: 2px;
+  left: 22px;
+  width: 24px;
+  height: 24px;
+  background: var(--md-on-primary);
+}
+
+/* ---------- action pickers ---------- */
+
+.action {
+  margin: 0 0 12px;
+}
+
+.action:first-child {
+  margin-top: 12px;
+}
+
+.action:last-child {
+  margin-bottom: 0;
+}
+
+.action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.action-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--md-on-surface);
+}
+
+.picker {
+  position: relative;
+}
+
+.picker-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 50px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--shape-lg);
+  background: var(--md-surface-container-high);
+  color: var(--md-on-surface);
+  font: 550 14px var(--font);
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow var(--dur-short) var(--ease-emph);
+}
+
+.picker-button:focus,
+.picker.open .picker-button {
+  box-shadow: 0 0 0 2px var(--md-primary);
+}
+
+.picker-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 12px;
+}
+
+.picker-label .msr {
+  color: var(--md-primary);
+  flex: 0 0 auto;
+}
+
+.picker-label .option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chevron {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--md-on-surface-variant);
+  border-bottom: 2px solid var(--md-on-surface-variant);
+  transform: rotate(45deg);
+  flex: 0 0 auto;
+  margin-right: 2px;
+  margin-left: 8px;
+  margin-top: -4px;
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+.picker.open .chevron {
+  transform: rotate(225deg);
+  margin-top: 4px;
+  border-color: var(--md-primary);
+}
+
+.menu {
+  display: none;
+  position: absolute;
+  z-index: 100;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  padding: 8px;
+  border-radius: var(--shape-md);
+  background: var(--md-surface-container);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  max-height: 300px;
+  overflow: auto;
+  transform-origin: top center;
+}
+
+.picker.open .menu {
+  display: block;
+  animation: menu-in var(--dur-med) var(--ease-emph);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scaleY(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  margin: 1px 0;
+  border: none;
+  border-radius: var(--shape-sm);
+  background: transparent;
+  color: var(--md-on-surface);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-emph);
+}
+
+.option .msr {
+  color: var(--md-on-surface-variant);
+  flex: 0 0 auto;
+}
+
+.option.selected .msr {
+  color: var(--md-primary);
+}
+
+.option .option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.option:active {
+  background: var(--md-surface-container-highest);
+}
+
+.option.selected {
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+  font-weight: 650;
+}
+
+.option.selected::after {
+  content: '✓';
+  margin-left: auto;
+  color: var(--md-primary);
+  font-weight: 800;
+}
+
+/* ---------- custom input ---------- */
+
+.custom-wrap {
+  display: none;
+  margin-top: 10px;
+}
+
+.custom-wrap.show {
+  display: block;
+  animation: menu-in var(--dur-short) var(--ease-emph);
+}
+
+/* ---------- buttons (MD3 filled / tonal, pill shape) ---------- */
+
+.buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+#debugCard .buttons {
+  margin: 0 0 12px;
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 52px;
+  margin: 0;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--shape-full);
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+  font: 650 14px var(--font);
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    transform var(--dur-short) var(--ease-spring),
+    filter var(--dur-short) var(--ease-emph);
+}
+
+.btn:active {
+  transform: scale(0.97);
+  filter: brightness(1.1);
+}
+
+/* ---------- log ---------- */
+
+.log {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: var(--shape-md);
+  background: var(--md-surface-container-lowest);
+  font: 11px/1.55 var(--mono);
+  color: var(--md-on-surface-variant);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 210px;
+  overflow: auto;
+}
+
+/* ---------- key head（卡片标题 + 启用开关） ---------- */
+
+.key-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  /* 间距放到 body 的 margin-top 上：卡片关闭（body 隐藏）时上下 padding 一致 */
+}
+
+.key-head .section-title {
+  margin-bottom: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.key-body {
+  margin-top: 12px;
+}
+
+/* ---------- key timing row ---------- */
+
+.key-timing {
+  margin-top: 12px; /* 与 gap 一致 */
+}
+
+/* 持续触发：标题与「长按判定」标题同一水平线，开关与输入框垂直对齐、贴右 */
+.switch-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  min-width: 0;
+}
+
+/* 52px 对齐槽：与输入框同高，开关在其中垂直居中；margin-top:auto 推到列底部与输入框对齐 */
+.switch-slot {
+  height: 52px;
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.switch-field .switch {
+  margin: 0;
+}
+
+.switch-field > label {
+  margin: 0;
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 480px) {
+  body {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  /* 长按判定 + 持续触发在窄屏下也保持同一行 */
+  .key-timing {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .title {
+    font-size: 27px;
+  }
+}
