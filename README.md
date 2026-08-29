@@ -31,6 +31,23 @@ pnpm pack:module    # 打包为 dist/OPlusKey-<version>.zip（不含源码）
 KernelSU / Magisk 管理器刷入 zip。配置文件位于
 `/data/adb/modules/OPlusKey/config/config.conf`，改动后自动热重载；WebUI（管理器模块页面）可视化编辑全部配置。
 
+## 发版与自动更新
+
+发版只需两步，版本号全自动：
+
+```sh
+git push origin master dev
+git tag v1.0.3-beta && git push origin v1.0.3-beta
+```
+
+打 `v` 标签后 Actions 自动把标签版本写入 `module.prop` 和 `update.json`
+（`versionCode` = 提交总数），构建并在 Release 附件带上
+`OPlusKey-<version>.zip` 和固定名的 `OPlusKey-latest.zip`。
+
+管理器通过 `module.prop` 里的 `updateJson` 定期检查 `update.json`，
+发现更高的 `versionCode` 即提示更新（zip 指向 latest Release 附件）。
+仓库里的 `module.prop`/`update.json` 只是占位模板，无需手动维护版本号。
+
 ## 目录
 
 ```

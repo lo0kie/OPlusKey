@@ -43,38 +43,27 @@ const actionPresets: Array<[string, string, string]> = [
   ['none', 'block', '无操作'],
   ['native', 'settings_backup_restore', '保留原始按键'],
   ['passthrough', 'double_arrow', '延迟转发按键'],
-  [
-    'shell:[ "$(cat /sys/class/leds/white:flash-1/brightness)" -gt 0 ] && (echo none > /sys/class/leds/white:flash-1/trigger; echo 0 > /sys/class/leds/white:flash-1/brightness) || (echo torch > /sys/class/leds/white:flash-1/trigger; echo 200 > /sys/class/leds/white:flash-1/brightness)',
+  ['shell:[ "$(cat /sys/class/leds/white:flash-1/brightness)" -gt 0 ] && (echo none > /sys/class/leds/white:flash-1/trigger; echo 0 > /sys/class/leds/white:flash-1/brightness) || (echo torch > /sys/class/leds/white:flash-1/trigger; echo 200 > /sys/class/leds/white:flash-1/brightness)',
     'flashlight_on',
     '手电筒',
   ],
-  ['intent:android.media.action.STILL_IMAGE_CAMERA', 'photo_camera', '打开相机'],
   ['service call color_screenshot 1', 'screenshot', '截图'],
+  ['intent:android.media.action.STILL_IMAGE_CAMERA', 'photo_camera', '打开相机'],
+  ['keyevent:KEYCODE_POWER', 'lock', '锁屏 / 电源'],
+  ['keyevent:223', 'dark_mode', '熄屏'],
+  ['keyevent:KEYCODE_VOLUME_MUTE', 'volume_off', '静音'],
   ['keyevent:KEYCODE_HOME', 'home', 'Home'],
   ['keyevent:KEYCODE_BACK', 'arrow_back', '返回'],
   ['keyevent:KEYCODE_APP_SWITCH', 'layers', '最近任务'],
   ['keyevent:KEYCODE_NOTIFICATION', 'notifications', '通知栏'],
-  ['shell:cmd statusbar expand-settings', 'tune', '快捷设置'],
   ['keyevent:KEYCODE_MEDIA_PLAY_PAUSE', 'play_pause', '播放 / 暂停'],
   ['keyevent:KEYCODE_VOLUME_UP', 'volume_up', '音量 +'],
   ['keyevent:KEYCODE_VOLUME_DOWN', 'volume_down', '音量 -'],
-  ['keyevent:KEYCODE_VOLUME_MUTE', 'volume_off', '静音'],
-  ['keyevent:KEYCODE_POWER', 'lock', '锁屏 / 电源'],
-  ['longpress:26', 'power_settings_new', '电源菜单(注入长按)'],
-  ['keyevent:223', 'dark_mode', '熄屏'],
-  ['shell:reboot', 'restart_alt', '重启'],
-  ['shell:reboot -p', 'power_off', '关机'],
   [
     'shell:am start-foreground-service -a oplus.intent.action.DIRECT_SIDEBAR_SERVICE -e extra_entrance_function full_screen_ocr -e triggered_app com.coloros.smartsidebar',
     'center_focus_strong',
     '小布识屏',
   ],
-  ['intent:android.settings.WIFI_SETTINGS', 'wifi', 'Wi-Fi 设置'],
-  ['intent:android.settings.BLUETOOTH_SETTINGS', 'bluetooth', '蓝牙设置'],
-  ['intent:android.settings.DISPLAY_SETTINGS', 'brightness_medium', '显示设置'],
-  ['intent:android.settings.SOUND_SETTINGS', 'graphic_eq', '声音设置'],
-  ['intent:android.settings.SETTINGS', 'settings', '系统设置'],
-  ['intent:android.settings.APPLICATION_SETTINGS', 'apps', '应用设置'],
   ['custom', 'edit', '自定义'],
 ];
 
@@ -155,7 +144,7 @@ interface ActionController {
 
 const actions: Record<string, ActionController> = {};
 
-function makeAction(stateKey: string, title: string, host: HTMLElement): ActionController {
+function makeAction(stateKey: string, title: string, host: HTMLElement, onStateChange?: () => void): ActionController {
   const root = document.createElement('div');
   root.className = 'action';
   root.innerHTML =
@@ -177,11 +166,13 @@ function makeAction(stateKey: string, title: string, host: HTMLElement): ActionC
       const cur = String(state[stateKey] ?? 'none');
       $input(`${stateKey}Input`).value = cur !== 'none' && !actionPresets.some(x => x[0] === cur) ? cur : '';
       render();
+      onStateChange?.();
       return;
     }
     state[stateKey] = v;
     $input(`${stateKey}Input`).value = '';
     render();
+    onStateChange?.();
     debouncedSave();
   });
 
@@ -189,6 +180,7 @@ function makeAction(stateKey: string, title: string, host: HTMLElement): ActionC
     if ($(`${stateKey}Picker`).dataset.value === 'custom') {
       state[stateKey] = $input(`${stateKey}Input`).value.trim() || 'none';
       render();
+      onStateChange?.();
       debouncedSave();
     }
   });
@@ -227,6 +219,7 @@ interface KeyCardRefs {
   repeat: HTMLInputElement;
   enabled: HTMLInputElement;
   body: HTMLElement;
+  syncTimingRow(): void;
 }
 
 function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
@@ -242,7 +235,9 @@ function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
     def.id +
     'Body"><div id="' +
     def.id +
-    'Actions"></div><div class="grid key-timing"><div class="field"><label for="' +
+    'Actions"></div><div class="grid key-timing" id="' +
+    def.id +
+    'Timing"><div class="field"><label for="' +
     def.id +
     'LongMs">长按判定 (ms)</label><input id="' +
     def.id +
@@ -261,7 +256,8 @@ function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
   const host = $(def.id + 'Actions');
   actions[def.keys.single] = makeAction(def.keys.single, '单击', host);
   actions[def.keys.double] = makeAction(def.keys.double, '双击', host);
-  actions[def.keys.long] = makeAction(def.keys.long, '长按', host);
+  // 长按动作为「无操作」时，长按判定/持续触发行无意义，随之隐藏
+  actions[def.keys.long] = makeAction(def.keys.long, '长按', host, () => syncTimingRow());
   const longMs = $input(def.id + 'LongMs');
   const repeat = $input(def.id + 'Repeat');
   const enabled = $input(def.id + 'Enabled');
@@ -277,6 +273,9 @@ function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
   function syncBody(): void {
     body.style.display = enabled.checked ? '' : 'none';
   }
+  function syncTimingRow(): void {
+    $(def.id + 'Timing').style.display = is_action_none(state[def.keys.long]) ? 'none' : '';
+  }
   enabled.addEventListener('change', () => {
     state[def.keys.enabled] = enabled.checked ? '1' : '0';
     syncBody();
@@ -284,7 +283,13 @@ function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
     debouncedSave();
   });
   syncBody();
-  return { longMs, repeat, enabled, body };
+  syncTimingRow();
+  return { longMs, repeat, enabled, body, syncTimingRow };
+}
+
+/* 与 config.ts 的 is_action_none 语义一致：none 或空字符串 */
+function is_action_none(v: string | undefined): boolean {
+  return !v || v === 'none';
 }
 
 uiLog('开始构建按键配置卡片');
@@ -355,6 +360,7 @@ function syncAllInputs(): void {
     actions[def.keys.single].set(state[def.keys.single]);
     actions[def.keys.double].set(state[def.keys.double]);
     actions[def.keys.long].set(state[def.keys.long]);
+    refs.syncTimingRow();
   }
 }
 

@@ -10,9 +10,12 @@ import { spawnSync } from 'node:child_process';
 import {
   copyFileSync,
   cpSync,
+  createReadStream,
   createWriteStream,
+  chmodSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -42,7 +45,7 @@ mkdirSync(join(staging, 'META-INF', 'com', 'google', 'android'), { recursive: tr
 mkdirSync(join(staging, 'config'), { recursive: true });
 
 // 模块根文件（来自 module/）
-for (const f of ['module.prop', 'service.sh', 'restart.sh', 'uninstall.sh', 'skip_mount']) {
+for (const f of ['module.prop', 'service.sh', 'restart.sh', 'uninstall.sh', 'skip_mount', 'customize.sh']) {
   copyFileSync(join(moduleDir, f), join(staging, f));
 }
 // 安装器
@@ -63,6 +66,7 @@ const daemonSrc = join(root, 'src', 'pluskeyd.c');
 if (existsSync(binSrc)) {
   mkdirSync(join(staging, 'bin'), { recursive: true });
   copyFileSync(binSrc, join(staging, 'bin', 'pluskeyd'));
+  chmodSync(join(staging, 'bin', 'pluskeyd'), 0o755); // zip 里必须可执行，否则 service.sh 拒绝启动
   const binTime = statSync(binSrc).mtimeMs;
   const srcTime = statSync(daemonSrc).mtimeMs;
   if (binTime < srcTime) {
@@ -87,7 +91,26 @@ const zipPath = join(distDir, zipName);
 const output = createWriteStream(zipPath);
 const archive = new ZipArchive({ zlib: { level: 9 } });
 archive.pipe(output);
-archive.directory(staging, false);
+
+// Windows 的 stat 没有 POSIX 权限位（恒为 666），必须逐条目显式指定 mode，
+// 否则刷入后 bin/pluskeyd 不可执行，service.sh 会拒绝启动
+const EXEC_FILES = new Set(['service.sh', 'restart.sh', 'uninstall.sh', 'update-binary', 'customize.sh', 'pluskeyd']);
+function addDir(dir, base = '') {
+  for (const name of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, name.name);
+    const rel = base ? `${base}/${name.name}` : name.name;
+    if (name.isDirectory()) {
+      addDir(full, rel);
+    } else {
+      archive.append(createReadStream(full), {
+        name: rel,
+        mode: EXEC_FILES.has(name.name) ? 0o755 : 0o644,
+      });
+    }
+  }
+}
+addDir(staging);
+
 await archive.finalize();
 await new Promise((resolve, reject) => {
   output.on('close', resolve);
@@ -95,7 +118,11 @@ await new Promise((resolve, reject) => {
 });
 rmSync(staging, { recursive: true, force: true });
 
+// 固定名副本：update.json 的 zipUrl 指向 releases/latest/download/OPlusKey-latest.zip
+copyFileSync(zipPath, join(distDir, `${id}-latest.zip`));
+
 console.log('[4/4] 完成');
 console.log(`\n产物: dist/${zipName} (${(statSync(zipPath).size / 1024).toFixed(1)} KB)`);
+console.log(`      dist/${id}-latest.zip（自动更新用，文件名固定）`);
 console.log('包内结构: module.prop, 脚本, META-INF/, config/, webroot/, bin/');
 console.log('不含: src/, 源码, 构建脚本, node_modules');

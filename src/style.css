@@ -378,10 +378,6 @@ input:not([type='checkbox']):focus {
   box-shadow: 0 0 0 2px var(--md-primary);
 }
 
-.picker.open .picker-button {
-  border-radius: var(--shape-lg) var(--shape-lg) var(--shape-md) var(--shape-md);
-}
-
 .picker-label {
   display: flex;
   align-items: center;
