@@ -5,8 +5,8 @@ export interface KeyDef {
   id: string;
   label: string;
   hint: string;
-  keys: { enabled: string; single: string; double: string; long: string; longMs: string; repeat: string };
-  defaults: { enabled: string; single: string; double: string; long: string; longMs: string; repeat: string };
+  keys: { enabled: string; single: string; double: string; long: string; longMs: string; repeat: string; repeatInterval: string };
+  defaults: { enabled: string; single: string; double: string; long: string; longMs: string; repeat: string; repeatInterval: string };
 }
 
 export const KEY_DEFS: KeyDef[] = [
@@ -21,8 +21,9 @@ export const KEY_DEFS: KeyDef[] = [
       long: 'plus_long',
       longMs: 'plus_long_press_ms',
       repeat: 'plus_long_repeat',
+      repeatInterval: 'plus_long_repeat_interval_ms',
     },
-    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0' },
+    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0', repeatInterval: '300' },
   },
   {
     id: 'power',
@@ -35,8 +36,9 @@ export const KEY_DEFS: KeyDef[] = [
       long: 'power_long',
       longMs: 'power_long_press_ms',
       repeat: 'power_long_repeat',
+      repeatInterval: 'power_long_repeat_interval_ms',
     },
-    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0' },
+    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0', repeatInterval: '300' },
   },
   {
     id: 'vol_up',
@@ -49,8 +51,9 @@ export const KEY_DEFS: KeyDef[] = [
       long: 'vol_up_long',
       longMs: 'vol_up_long_press_ms',
       repeat: 'vol_up_long_repeat',
+      repeatInterval: 'vol_up_long_repeat_interval_ms',
     },
-    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0' },
+    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0', repeatInterval: '300' },
   },
   {
     id: 'vol_down',
@@ -63,8 +66,9 @@ export const KEY_DEFS: KeyDef[] = [
       long: 'vol_down_long',
       longMs: 'vol_down_long_press_ms',
       repeat: 'vol_down_long_repeat',
+      repeatInterval: 'vol_down_long_repeat_interval_ms',
     },
-    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0' },
+    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0', repeatInterval: '300' },
   },
 ];
 
@@ -83,6 +87,7 @@ export const DEFAULTS: Record<string, string> = (() => {
     d[def.keys.long] = def.defaults.long;
     d[def.keys.longMs] = def.defaults.longMs;
     d[def.keys.repeat] = def.defaults.repeat;
+    d[def.keys.repeatInterval] = def.defaults.repeatInterval;
   }
   return d;
 })();
@@ -99,7 +104,7 @@ export function buildConfigText(): string {
   const lines = [
     '# OPlusKey Remapper',
     `double_click_ms=${clampNum(state.double_click_ms, 100, 2000, 300)}`,
-    `long_repeat_interval_ms=${clampNum(state.long_repeat_interval_ms, 50, 5000, 300)}`,
+    `long_repeat_interval_ms=${clampNum(state.long_repeat_interval_ms, 100, 5000, 300)}`,
     `vibrate=${state.vibrate === '1' ? '1' : '0'}`,
     '',
   ];
@@ -112,6 +117,7 @@ export function buildConfigText(): string {
       `${def.keys.double}=${state[def.keys.double] || 'none'}`,
       `${def.keys.long}=${state[def.keys.long] || 'none'}`,
       `${def.keys.repeat}=${state[def.keys.repeat] === '1' ? '1' : '0'}`,
+      `${def.keys.repeatInterval}=${clampNum(state[def.keys.repeatInterval], 100, 5000, 300)}`,
       ''
     );
   }

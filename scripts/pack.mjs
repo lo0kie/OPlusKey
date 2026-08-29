@@ -62,12 +62,12 @@ for (const f of ['update-binary', 'updater-script']) {
 // WebUI 构建产物（vite 输出到 dist/webroot）
 cpSync(join(root, 'dist', 'webroot'), join(staging, 'webroot'), { recursive: true });
 
-// launch.png：管理器显示的模块图标，由 public/icon.svg 渲染到 zip 根目录
-const launchPng = await sharp(join(root, 'public', 'icon.svg'), { density: 341 })
+// launcher.png：管理器显示的模块图标，由 public/icon.svg 渲染到 zip 根目录
+const launcherPng = await sharp(join(root, 'public', 'icon.svg'), { density: 341 })
   .resize(512, 512)
   .png()
   .toBuffer();
-writeFileSync(join(staging, 'launch.png'), launchPng);
+writeFileSync(join(staging, 'launcher.png'), launcherPng);
 
 // daemon 二进制：C 构建产物，位于 module/bin/；检查存在性与新鲜度
 const binSrc = join(moduleDir, 'bin', 'pluskeyd');

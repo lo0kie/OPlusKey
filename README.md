@@ -24,6 +24,7 @@
 | `<key>_long`          | none   | 长按动作         |
 | `<key>_long_press_ms` | 500    | 长按判定时长     |
 | `<key>_long_repeat`   | 0      | 长按是否持续触发 |
+| `<key>_long_repeat_interval_ms` | 300 | 持续触发间隔，100–5000 |
 
 动作写法：
 
@@ -39,7 +40,7 @@
 
 几个坑：
 
-- `native` 只对单击有意义，双击或长按写成 `native` 会被当成 `none`
+- `native` 只对单击有意义（整键不接管）；双击/长按的「保留原始按键」选项已从 WebUI 移除，手动写 `native` 会被当成 `none`
 - 单击 `native` 但又配了双击或长按，自动降级为 `passthrough`
 - 电源键配长按连发会屏蔽系统电源菜单；音量键保持 `native` 才能长按连续调节音量
 

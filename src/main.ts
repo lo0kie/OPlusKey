@@ -66,6 +66,9 @@ const actionPresets: Array<[string, string, string]> = [
   ['custom', 'edit', '自定义'],
 ];
 
+// 双击/长按没有"保留原始按键"：键被接管后不存在原生行为，去掉避免误导
+const actionPresetsNoNative = actionPresets.filter(([v]) => v !== 'native');
+
 // ---------- 通用选择器 ----------
 
 interface Picker {
@@ -143,7 +146,13 @@ interface ActionController {
 
 const actions: Record<string, ActionController> = {};
 
-function makeAction(stateKey: string, title: string, host: HTMLElement, onStateChange?: () => void): ActionController {
+function makeAction(
+  stateKey: string,
+  title: string,
+  host: HTMLElement,
+  onStateChange?: () => void,
+  presets: Array<[string, string, string]> = actionPresets
+): ActionController {
   const root = document.createElement('div');
   root.className = 'action';
   root.innerHTML =
@@ -158,12 +167,12 @@ function makeAction(stateKey: string, title: string, host: HTMLElement, onStateC
     'Input" autocomplete="off" placeholder="例如 shell:cmd statusbar expand-notifications"></div>';
   host.appendChild(root);
 
-  const picker = makePicker($(`${stateKey}Picker`), actionPresets, 'none', v => {
+  const picker = makePicker($(`${stateKey}Picker`), presets, 'none', v => {
     if (v === 'custom') {
       // 进入自定义模式只打开输入框并预填当前值，不覆盖 state、不触发保存，
       // 否则空输入会把配置冲成 none 并在自动保存同步时把选择器弹回
       const cur = String(state[stateKey] ?? 'none');
-      $input(`${stateKey}Input`).value = cur !== 'none' && !actionPresets.some(x => x[0] === cur) ? cur : '';
+      $input(`${stateKey}Input`).value = cur !== 'none' && !presets.some(x => x[0] === cur) ? cur : '';
       render();
       onStateChange?.();
       return;
@@ -193,7 +202,7 @@ function makeAction(stateKey: string, title: string, host: HTMLElement, onStateC
   return {
     set(v) {
       v = String(v ?? 'none');
-      if (actionPresets.some(x => x[0] === v && x[0] !== 'custom')) {
+      if (presets.some(x => x[0] === v && x[0] !== 'custom')) {
         picker.set(v);
         $input(`${stateKey}Input`).value = '';
       } else if (v !== 'none') {
@@ -216,6 +225,7 @@ function makeAction(stateKey: string, title: string, host: HTMLElement, onStateC
 interface KeyCardRefs {
   longMs: HTMLInputElement;
   repeat: HTMLInputElement;
+  repeatInterval: HTMLInputElement;
   enabled: HTMLInputElement;
   body: HTMLElement;
   syncTimingRow(): void;
@@ -248,17 +258,27 @@ function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
     def.id +
     'Repeat"><input id="' +
     def.id +
-    'Repeat" type="checkbox" /><span class="switch-track"><span class="switch-thumb"></span></span></label></div></div></div><div class="hint">' +
+    'Repeat" type="checkbox" /><span class="switch-track"><span class="switch-thumb"></span></span></label></div></div></div><div class="field" id="' +
+    def.id +
+    'RepeatRow" style="margin-top:12px;display:none"><label for="' +
+    def.id +
+    'RepeatInterval">连续触发间隔 (ms)</label><input id="' +
+    def.id +
+    'RepeatInterval" type="text" inputmode="numeric" autocomplete="off" placeholder="' +
+    def.defaults.repeatInterval +
+    '" /></div><div class="hint">' +
     def.hint +
     '</div></div>';
   $('keyCards').appendChild(card);
   const host = $(def.id + 'Actions');
   actions[def.keys.single] = makeAction(def.keys.single, '单击', host);
-  actions[def.keys.double] = makeAction(def.keys.double, '双击', host);
+  // 双击/长按没有「保留原始按键」：键被接管后不存在原生行为
+  actions[def.keys.double] = makeAction(def.keys.double, '双击', host, undefined, actionPresetsNoNative);
   // 长按动作为「无操作」时，长按判定/持续触发行无意义，随之隐藏
-  actions[def.keys.long] = makeAction(def.keys.long, '长按', host, () => syncTimingRow());
+  actions[def.keys.long] = makeAction(def.keys.long, '长按', host, () => syncTimingRow(), actionPresetsNoNative);
   const longMs = $input(def.id + 'LongMs');
   const repeat = $input(def.id + 'Repeat');
+  const repeatInterval = $input(def.id + 'RepeatInterval');
   const enabled = $input(def.id + 'Enabled');
   const body = $(def.id + 'Body');
   longMs.addEventListener('input', () => {
@@ -267,15 +287,25 @@ function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
   });
   repeat.addEventListener('change', () => {
     state[def.keys.repeat] = repeat.checked ? '1' : '0';
+    syncRepeatRow();
+    debouncedSave();
+  });
+  repeatInterval.addEventListener('input', () => {
+    state[def.keys.repeatInterval] = repeatInterval.value.replace(/[^\d]/g, '');
     debouncedSave();
   });
   function syncBody(): void {
     body.style.display = enabled.checked ? '' : 'none';
   }
+  function syncRepeatRow(): void {
+    const rowVisible = $(def.id + 'Timing').style.display !== 'none';
+    $(def.id + 'RepeatRow').style.display = rowVisible && repeat.checked ? '' : 'none';
+  }
   function syncTimingRow(): void {
     const v = state[def.keys.long];
     const noop = !v || v === 'none' || v === 'native';
     $(def.id + 'Timing').style.display = noop ? 'none' : '';
+    syncRepeatRow();
   }
   enabled.addEventListener('change', () => {
     state[def.keys.enabled] = enabled.checked ? '1' : '0';
@@ -285,7 +315,7 @@ function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
   });
   syncBody();
   syncTimingRow();
-  return { longMs, repeat, enabled, body, syncTimingRow };
+  return { longMs, repeat, repeatInterval, enabled, body, syncTimingRow };
 }
 
 uiLog('开始构建按键配置卡片');
@@ -353,6 +383,7 @@ function syncAllInputs(): void {
     refs.body.style.display = refs.enabled.checked ? '' : 'none';
     refs.longMs.value = state[def.keys.longMs];
     refs.repeat.checked = state[def.keys.repeat] === '1';
+    refs.repeatInterval.value = state[def.keys.repeatInterval];
     actions[def.keys.single].set(state[def.keys.single]);
     actions[def.keys.double].set(state[def.keys.double]);
     actions[def.keys.long].set(state[def.keys.long]);

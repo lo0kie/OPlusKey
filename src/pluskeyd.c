@@ -34,7 +34,7 @@
 #define DEFAULT_REPEAT_INTERVAL_MS 300
 #define MIN_DOUBLE_CLICK_MS 100
 #define MAX_DOUBLE_CLICK_MS 2000
-#define MIN_REPEAT_INTERVAL_MS 50
+#define MIN_REPEAT_INTERVAL_MS 100
 #define MAX_REPEAT_INTERVAL_MS 5000
 /* longpress: 注入的按住时长。固定 3s：必须超过系统识别长按的阈值
  * （ColorOS 约 3s），不能用按键自身的 long_press_ms（那只是触发阈值） */
@@ -74,6 +74,7 @@ enum cfg_field {
     F_LONG,
     F_LONG_MS,
     F_LONG_REPEAT,
+    F_LONG_REPEAT_MS,
     F_ENABLED
 };
 
@@ -83,6 +84,7 @@ struct key_config {
     char long_action[ACTION_MAX];
     int long_press_ms;
     int long_repeat;
+    int long_repeat_interval_ms;
     int enabled;
 };
 
@@ -280,6 +282,7 @@ static void set_key_defaults(struct config_data *c)
         snprintf(k->long_action, ACTION_MAX, "none");
         k->long_press_ms = DEFAULT_LONG_PRESS_MS;
         k->long_repeat = 0;
+        k->long_repeat_interval_ms = DEFAULT_REPEAT_INTERVAL_MS;
         k->enabled = 0;
     }
 }
@@ -396,21 +399,25 @@ static const struct cfg_entry CFG_ENTRIES[] = {
     { "plus_long_press_ms", KID_PLUS, F_LONG_MS },
     { "long_repeat", KID_PLUS, F_LONG_REPEAT },
     { "plus_long_repeat", KID_PLUS, F_LONG_REPEAT },
+    { "plus_long_repeat_interval_ms", KID_PLUS, F_LONG_REPEAT_MS },
     { "power_single", KID_POWER, F_SINGLE },
     { "power_double", KID_POWER, F_DOUBLE },
     { "power_long", KID_POWER, F_LONG },
     { "power_long_press_ms", KID_POWER, F_LONG_MS },
     { "power_long_repeat", KID_POWER, F_LONG_REPEAT },
+    { "power_long_repeat_interval_ms", KID_POWER, F_LONG_REPEAT_MS },
     { "vol_up_single", KID_VOL_UP, F_SINGLE },
     { "vol_up_double", KID_VOL_UP, F_DOUBLE },
     { "vol_up_long", KID_VOL_UP, F_LONG },
     { "vol_up_long_press_ms", KID_VOL_UP, F_LONG_MS },
     { "vol_up_long_repeat", KID_VOL_UP, F_LONG_REPEAT },
+    { "vol_up_long_repeat_interval_ms", KID_VOL_UP, F_LONG_REPEAT_MS },
     { "vol_down_single", KID_VOL_DOWN, F_SINGLE },
     { "vol_down_double", KID_VOL_DOWN, F_DOUBLE },
     { "vol_down_long", KID_VOL_DOWN, F_LONG },
     { "vol_down_long_press_ms", KID_VOL_DOWN, F_LONG_MS },
     { "vol_down_long_repeat", KID_VOL_DOWN, F_LONG_REPEAT },
+    { "vol_down_long_repeat_interval_ms", KID_VOL_DOWN, F_LONG_REPEAT_MS },
     { "plus_enabled", KID_PLUS, F_ENABLED },
     { "power_enabled", KID_POWER, F_ENABLED },
     { "vol_up_enabled", KID_VOL_UP, F_ENABLED },
@@ -516,6 +523,15 @@ static int parse_config_file(struct config_data *cfg)
                 case F_LONG_REPEAT:
                     k->long_repeat = parse_bool(value);
                     break;
+                case F_LONG_REPEAT_MS: {
+                    int v = parse_int_in(value, MIN_REPEAT_INTERVAL_MS, MAX_REPEAT_INTERVAL_MS);
+                    if (v >= 0) {
+                        k->long_repeat_interval_ms = v;
+                    } else {
+                        log_msg("CONFIG WARNING: invalid %s=%s, using %d\n", key, value, k->long_repeat_interval_ms);
+                    }
+                    break;
+                }
                 case F_ENABLED:
                     k->enabled = parse_bool(value);
                     break;
@@ -572,6 +588,9 @@ static void apply_config(const struct config_data *cfg)
         snprintf(k->cfg.long_action, ACTION_MAX, "%s", c->long_action);
         k->cfg.long_press_ms = c->long_press_ms;
         k->cfg.long_repeat = c->long_repeat;
+        /* 每键连发间隔缺省时回退到全局 long_repeat_interval_ms */
+        k->cfg.long_repeat_interval_ms =
+            c->long_repeat_interval_ms ? c->long_repeat_interval_ms : cfg->repeat_interval_ms;
         k->cfg.enabled = c->enabled;
         /* 禁用的按键等同 native：不独占、不处理 */
         k->native = !c->enabled ||
@@ -581,9 +600,9 @@ static void apply_config(const struct config_data *cfg)
         if (was_native != k->native) {
             native_changed = 1;
         }
-        log_msg("CONFIG %s: enabled=%d single=%s double=%s long=%s long_press_ms=%d long_repeat=%d native=%d\n",
+        log_msg("CONFIG %s: enabled=%d single=%s double=%s long=%s long_press_ms=%d long_repeat=%d/%dms native=%d\n",
                 k->name, k->cfg.enabled, k->cfg.single, k->cfg.double_action, k->cfg.long_action,
-                k->cfg.long_press_ms, k->cfg.long_repeat, k->native);
+                k->cfg.long_press_ms, k->cfg.long_repeat, k->cfg.long_repeat_interval_ms, k->native);
     }
     g_double_click_ms = cfg->double_click_ms;
     g_repeat_interval_ms = cfg->repeat_interval_ms;
@@ -1354,7 +1373,7 @@ static long long key_timeout_ms(struct key_ctx *k)
         }
         if (k->cfg.long_repeat && !is_action_none(k->cfg.long_action) &&
             strncmp(k->cfg.long_action, "longpress:", 10) != 0) {
-            long long remain = (long long)g_repeat_interval_ms - (now_ms() - k->press_start);
+            long long remain = (long long)k->cfg.long_repeat_interval_ms - (now_ms() - k->press_start);
             return remain > 0 ? remain : 0;
         }
         return -1;
