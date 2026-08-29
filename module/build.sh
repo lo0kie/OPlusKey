@@ -5,7 +5,8 @@ set -u
 MODDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SRC="$MODDIR/src/pluskeyd.c"
 OUT="$MODDIR/bin/pluskeyd"
-CONFIG="$MODDIR/config/config.conf"
+# 配置在模块目录之外，更新模块不会丢
+CONFIG="/data/adb/OPlusKey/config.conf"
 
 # MT Terminal / Termux clang
 CLANG="/data/data/com.termux/files/usr/bin/clang"
@@ -83,10 +84,10 @@ echo
 echo "[3/8] 创建输出目录"
 
 mkdir -p "$MODDIR/bin"
-mkdir -p "$MODDIR/config"
+mkdir -p "$(dirname "$CONFIG")"
 
 echo "[OK] $MODDIR/bin"
-echo "[OK] $MODDIR/config"
+echo "[OK] $(dirname "$CONFIG")"
 
 # ============================================================
 # 5. 配置文件
@@ -101,34 +102,41 @@ if [ ! -f "$CONFIG" ]; then
 
     cat > "$CONFIG" <<'CONFIG_EOF'
 # OPlusKey Remapper
+# 动作格式: none=屏蔽 | native=保留原始按键 | passthrough=判定后转发一次按键
+#          keyevent:KEYCODE | shell:命令 | intent:ACTION | app:包名/Activity | 其他任意 shell 命令
+
 double_click_ms=300
 long_repeat_interval_ms=300
 longpress_hold_ms=3000
 vibrate=0
 
 # 侧键 (Plus Key)
-long_press_ms=600
-single=none
+plus_enabled=0
+long_press_ms=500
+single=native
 double=none
 long=none
 long_repeat=0
 
 # 电源键
-power_long_press_ms=800
+power_enabled=0
+power_long_press_ms=500
 power_single=native
 power_double=none
 power_long=none
 power_long_repeat=0
 
 # 音量+
-vol_up_long_press_ms=600
+vol_up_enabled=0
+vol_up_long_press_ms=500
 vol_up_single=native
 vol_up_double=none
 vol_up_long=none
 vol_up_long_repeat=0
 
 # 音量-
-vol_down_long_press_ms=600
+vol_down_enabled=0
+vol_down_long_press_ms=500
 vol_down_single=native
 vol_down_double=none
 vol_down_long=none

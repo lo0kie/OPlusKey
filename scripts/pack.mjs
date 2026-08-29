@@ -2,7 +2,9 @@
 // 用法: pnpm pack:module
 //   先跑 pnpm build 生成 webroot/，然后组装 module/ 下的模块内容:
 //     module.prop / service.sh / restart.sh / uninstall.sh / skip_mount
-//     META-INF/ + config/config.conf + webroot/ + bin/pluskeyd
+//     META-INF/ + webroot/ + bin/pluskeyd
+// 注意：不打进 config/，配置文件在 /data/adb/OPlusKey 下，
+//      包里带一份会在每次刷入时覆盖用户的配置
 //   打包为 dist/<id>-<version>.zip
 
 import { ZipArchive } from 'archiver';
@@ -42,7 +44,6 @@ console.log('[2/4] 组装模块文件...');
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(staging, { recursive: true });
 mkdirSync(join(staging, 'META-INF', 'com', 'google', 'android'), { recursive: true });
-mkdirSync(join(staging, 'config'), { recursive: true });
 
 // 模块根文件（来自 module/）
 for (const f of ['module.prop', 'service.sh', 'restart.sh', 'uninstall.sh', 'skip_mount', 'customize.sh']) {
@@ -55,8 +56,7 @@ for (const f of ['update-binary', 'updater-script']) {
     join(staging, 'META-INF', 'com', 'google', 'android', f)
   );
 }
-// 默认配置
-copyFileSync(join(moduleDir, 'config', 'config.conf'), join(staging, 'config', 'config.conf'));
+// 不打配置：默认配置由 daemon 在 /data/adb/OPlusKey/config.conf 首次启动时生成
 // WebUI 构建产物（vite 输出到 dist/webroot）
 cpSync(join(root, 'dist', 'webroot'), join(staging, 'webroot'), { recursive: true });
 
@@ -124,5 +124,5 @@ copyFileSync(zipPath, join(distDir, `${id}-latest.zip`));
 console.log('[4/4] 完成');
 console.log(`\n产物: dist/${zipName} (${(statSync(zipPath).size / 1024).toFixed(1)} KB)`);
 console.log(`      dist/${id}-latest.zip（自动更新用，文件名固定）`);
-console.log('包内结构: module.prop, 脚本, META-INF/, config/, webroot/, bin/');
+console.log('包内结构: module.prop, 脚本, META-INF/, webroot/, bin/');
 console.log('不含: src/, 源码, 构建脚本, node_modules');

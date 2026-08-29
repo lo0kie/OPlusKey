@@ -3,6 +3,8 @@
 MODDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 DAEMON="$MODDIR/bin/pluskeyd"
 LOG="$MODDIR/pluskey.log"
+PIDFILE="$MODDIR/run/pluskeyd.pid"
+SUPERVISOR_PIDFILE="$MODDIR/run/supervisor.pid"
 
 # 权限自修（部分管理器解压不保留权限位）
 chmod 755 "$DAEMON" 2>/dev/null
@@ -16,19 +18,42 @@ if [ "$(id -u)" != "0" ]; then
     exit 1
 fi
 
-echo "[1/5] 清理所有 pluskeyd"
+# 看护进程是否存活（service.sh 自身，前台阻塞在看护循环里）
+is_supervisor() {
+    PID="$1"
+    [ -n "$PID" ] || return 1
+    [ -d "/proc/$PID" ] || return 1
+    case "$(cat "/proc/$PID/cmdline" 2>/dev/null | tr '\000' ' ')" in
+        *"$MODDIR/service.sh"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+SUPERVISOR_PID=""
+if [ -f "$SUPERVISOR_PIDFILE" ]; then
+    CANDIDATE="$(cat "$SUPERVISOR_PIDFILE" 2>/dev/null)"
+    if is_supervisor "$CANDIDATE"; then
+        SUPERVISOR_PID="$CANDIDATE"
+    fi
+fi
+
+echo "[1/5] 停止当前 daemon"
 
 pkill -9 -x pluskeyd 2>/dev/null || true
 
 sleep 1
 
 if pgrep -x pluskeyd >/dev/null 2>&1; then
-    echo "[ERROR] 无法停止旧 pluskeyd"
-    pgrep -a -x pluskeyd
-    exit 1
+    # 看护进程可能已经抢先重启了 daemon，这不算失败
+    if [ -z "$SUPERVISOR_PID" ]; then
+        echo "[ERROR] 无法停止旧 pluskeyd"
+        pgrep -a -x pluskeyd
+        exit 1
+    fi
+    echo "[INFO] 看护进程已立即拉起新 daemon"
+else
+    echo "[OK] 旧进程已停止"
 fi
-
-echo "[OK] 所有旧进程已停止"
 
 echo
 echo "[2/5] 检查 daemon"
@@ -42,25 +67,42 @@ fi
 ls -lh "$DAEMON"
 
 echo
-echo "[3/5] 启动唯一 daemon"
+echo "[3/5] 重新拉起 daemon"
 
-# 再次确认，防止 service.sh 在此期间启动
-if pgrep -x pluskeyd >/dev/null 2>&1; then
-    echo "[ERROR] 检测到其他 pluskeyd 正在运行"
-    pgrep -a -x pluskeyd
-    exit 1
+if [ -n "$SUPERVISOR_PID" ]; then
+    echo "[INFO] 看护进程 pid=$SUPERVISOR_PID 在运行，等待其自动重启（最多 30s）"
+    NEW_PID=""
+    i=0
+    while [ "$i" -lt 30 ]; do
+        sleep 1
+        i=$((i + 1))
+        NEW_PID="$(pgrep -x pluskeyd | head -n 1)"
+        [ -n "$NEW_PID" ] && break
+    done
+    if [ -z "$NEW_PID" ]; then
+        echo "[ERROR] 看护进程未能在 30s 内拉起 daemon"
+        tail -50 "$LOG" 2>/dev/null
+        exit 1
+    fi
+    echo "[OK] 看护已重启 daemon pid=$NEW_PID"
+else
+    # 没有看护进程（例如 service.sh 未启动），手动启动
+    rm -f "$PIDFILE"
+    "$DAEMON" >> "$LOG" 2>&1 &
+    NEW_PID=$!
+    echo "[OK] 手动启动 PID=$NEW_PID"
+    sleep 1
+    if ! kill -0 "$NEW_PID" 2>/dev/null; then
+        echo "[ERROR] daemon 启动后立即退出"
+        tail -50 "$LOG" 2>/dev/null
+        exit 1
+    fi
+    echo "$NEW_PID" > "$PIDFILE" 2>/dev/null
+    chmod 600 "$PIDFILE" 2>/dev/null
 fi
 
-"$DAEMON" >> "$LOG" 2>&1 &
-
-PID=$!
-
-echo "[OK] 启动 PID=$PID"
-
-sleep 1
-
 echo
-echo "[4/5] 检查 daemon"
+echo "[4/5] 检查 daemon 数量"
 
 COUNT=$(pgrep -x pluskeyd | wc -l)
 

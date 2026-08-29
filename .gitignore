@@ -5,6 +5,7 @@ node_modules/
 /dist/
 /module/bin/*
 !/module/bin/.gitkeep
+.temp/
 
 # 日志与临时文件
 *.log

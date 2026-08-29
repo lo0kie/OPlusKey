@@ -4,15 +4,20 @@ MODDIR=${0%/*}
 DAEMON="$MODDIR/bin/pluskeyd"
 PIDDIR="$MODDIR/run"
 PIDFILE="$PIDDIR/pluskeyd.pid"
+SUPERVISOR_PIDFILE="$PIDDIR/supervisor.pid"
+STOPFILE="$PIDDIR/stop"
 LOGFILE="$MODDIR/pluskey.log"
-CONFIG="$MODDIR/config/config.conf"
+# 配置在模块目录之外，更新模块不会丢；默认配置由 daemon 首次启动时创建
+PERSIST_DIR="/data/adb/OPlusKey"
+CONFIG="$PERSIST_DIR/config.conf"
 
 mkdir -p "$PIDDIR"
-mkdir -p "$MODDIR/config"
+mkdir -p "$PERSIST_DIR"
 
 # 部分管理器解压不保留权限位，每次启动前自修（以 root 运行，必然生效）
 chmod 755 "$DAEMON" "$MODDIR/restart.sh" "$MODDIR/uninstall.sh" 2>/dev/null
-chmod 644 "$MODDIR/module.prop" "$CONFIG" 2>/dev/null
+chmod 644 "$MODDIR/module.prop" 2>/dev/null
+chmod 600 "$CONFIG" 2>/dev/null
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOGFILE"
@@ -35,54 +40,20 @@ if [ ! -x "$DAEMON" ]; then
     exit 1
 fi
 
-if [ ! -f "$CONFIG" ]; then
-    log "config does not exist, creating default config"
-    cat > "$CONFIG" <<'EOF'
-# OPlusKey Remapper
-# 动作格式: none=屏蔽 | native=保留原始按键 | passthrough=判定后转发一次按键
-#          keyevent:KEYCODE | shell:命令 | intent:ACTION | app:包名/Activity | 其他任意 shell 命令
+log "CONFIG=$CONFIG"
 
-double_click_ms=300
-long_repeat_interval_ms=300
-longpress_hold_ms=3000
-vibrate=0
-
-# 侧键 (Plus Key)
-long_press_ms=600
-single=none
-double=none
-long=none
-long_repeat=0
-
-# 电源键
-power_long_press_ms=800
-power_single=native
-power_double=none
-power_long=none
-power_long_repeat=0
-
-# 音量+
-vol_up_long_press_ms=600
-vol_up_single=native
-vol_up_double=none
-vol_up_long=none
-vol_up_long_repeat=0
-
-# 音量-
-vol_down_long_press_ms=600
-vol_down_single=native
-vol_down_double=none
-vol_down_long=none
-vol_down_long_repeat=0
-EOF
-    chmod 600 "$CONFIG"
-    log "default config created"
+if [ -f "$CONFIG" ]; then
+    log "config found, keeping it"
+    log "current config:"
+    cat "$CONFIG" >> "$LOGFILE"
 else
-    log "config already exists, keeping current config"
+    # 旧版本（v1.0.2-beta 及更早）的配置在模块目录里，daemon 启动时会自动迁移过来
+    if [ -f "$MODDIR/config/config.conf" ]; then
+        log "legacy config found at $MODDIR/config/config.conf, daemon will migrate it"
+    else
+        log "no config yet, daemon will create the default one"
+    fi
 fi
-
-log "current config:"
-cat "$CONFIG" >> "$LOGFILE"
 
 is_our_daemon() {
     PID="$1"
@@ -112,49 +83,94 @@ find_daemon_pid() {
     return 1
 }
 
+# 判断某个 PID 是否是本模块的看护进程（本脚本自身）
+is_supervisor() {
+    PID="$1"
+    [ -n "$PID" ] || return 1
+    [ -d "/proc/$PID" ] || return 1
+    CMDLINE="$(cat "/proc/$PID/cmdline" 2>/dev/null | tr '\000' ' ')"
+    case "$CMDLINE" in
+        *"$MODDIR/service.sh"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# 启动 daemon，成功返回 0
+start_daemon() {
+    rm -f "$PIDFILE"
+
+    log "starting daemon"
+    "$DAEMON" >> "$LOGFILE" 2>&1 &
+    DAEMON_PID=$!
+
+    log "daemon forked pid=$DAEMON_PID"
+
+    i=1
+    while [ "$i" -le 10 ]; do
+        sleep 1
+        if kill -0 "$DAEMON_PID" 2>/dev/null; then
+            if is_our_daemon "$DAEMON_PID"; then
+                echo "$DAEMON_PID" > "$PIDFILE"
+                chmod 600 "$PIDFILE"
+                log "pluskeyd started successfully pid=$DAEMON_PID"
+                return 0
+            fi
+            log "ERROR: started PID is not our daemon"
+            kill "$DAEMON_PID" 2>/dev/null
+            rm -f "$PIDFILE"
+            return 1
+        fi
+        log "daemon exited during startup, attempt check=$i"
+        i=$((i + 1))
+    done
+
+    log "ERROR: daemon failed to start"
+    rm -f "$PIDFILE"
+    return 1
+}
+
+# 已有看护进程在运行就不重复看护（管理器可能多次调用 service.sh）
+if [ -f "$SUPERVISOR_PIDFILE" ]; then
+    SUPERVISOR_PID="$(cat "$SUPERVISOR_PIDFILE" 2>/dev/null)"
+    if is_supervisor "$SUPERVISOR_PID"; then
+        log "supervisor already running pid=$SUPERVISOR_PID, exit"
+        exit 0
+    fi
+fi
+
+echo "$$" > "$SUPERVISOR_PIDFILE"
+chmod 600 "$SUPERVISOR_PIDFILE"
+rm -f "$STOPFILE"
+
 EXISTING_PID="$(find_daemon_pid)"
 
 if [ -n "$EXISTING_PID" ]; then
     log "pluskeyd already running pid=$EXISTING_PID"
     echo "$EXISTING_PID" > "$PIDFILE"
     chmod 600 "$PIDFILE"
-    log "service start finished: existing daemon reused"
-    exit 0
+else
+    start_daemon
 fi
 
-rm -f "$PIDFILE"
-
-log "starting daemon"
-"$DAEMON" >> "$LOGFILE" 2>&1 &
-DAEMON_PID=$!
-
-log "daemon forked pid=$DAEMON_PID"
-echo "$DAEMON_PID" > "$PIDFILE"
-chmod 600 "$PIDFILE"
-
-START_OK=0
-for i in 1 2 3 4 5 6 7 8 9 10; do
-    sleep 1
-    if kill -0 "$DAEMON_PID" 2>/dev/null; then
-        START_OK=1
+# 看护循环：Magisk/KernelSU 的 service 脚本以前台方式运行，
+# 阻塞在这里即可持续守护；daemon 崩溃/被杀后 5 秒内自动拉起。
+# uninstall.sh 写入 $STOPFILE 通知本循环退出（卸载时不要把 daemon 拉回来）。
+log "entering supervisor loop pid=$$"
+while [ ! -f "$STOPFILE" ]; do
+    if [ ! -x "$DAEMON" ]; then
+        log "ERROR: daemon no longer executable, supervisor exiting"
         break
     fi
-    log "daemon exited during startup, attempt check=$i"
+    CURRENT_PID="$(find_daemon_pid)"
+    if [ -z "$CURRENT_PID" ]; then
+        log "daemon is gone, restarting"
+        start_daemon
+    else
+        echo "$CURRENT_PID" > "$PIDFILE"
+    fi
+    sleep 5
 done
 
-if [ "$START_OK" != "1" ]; then
-    log "ERROR: daemon failed to start"
-    rm -f "$PIDFILE"
-    exit 1
-fi
-
-if ! is_our_daemon "$DAEMON_PID"; then
-    log "ERROR: started PID is not our daemon"
-    kill "$DAEMON_PID" 2>/dev/null
-    rm -f "$PIDFILE"
-    exit 1
-fi
-
-log "pluskeyd started successfully"
-log "pid=$DAEMON_PID"
+rm -f "$SUPERVISOR_PIDFILE"
+log "supervisor exiting pid=$$"
 exit 0

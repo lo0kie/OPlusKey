@@ -22,7 +22,7 @@ export const KEY_DEFS: KeyDef[] = [
       longMs: 'long_press_ms',
       repeat: 'long_repeat',
     },
-    defaults: { enabled: '1', single: 'none', double: 'none', long: 'none', longMs: '600', repeat: '0' },
+    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0' },
   },
   {
     id: 'power',
@@ -36,7 +36,7 @@ export const KEY_DEFS: KeyDef[] = [
       longMs: 'power_long_press_ms',
       repeat: 'power_long_repeat',
     },
-    defaults: { enabled: '1', single: 'native', double: 'none', long: 'none', longMs: '800', repeat: '0' },
+    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0' },
   },
   {
     id: 'vol_up',
@@ -50,7 +50,7 @@ export const KEY_DEFS: KeyDef[] = [
       longMs: 'vol_up_long_press_ms',
       repeat: 'vol_up_long_repeat',
     },
-    defaults: { enabled: '1', single: 'native', double: 'none', long: 'none', longMs: '600', repeat: '0' },
+    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0' },
   },
   {
     id: 'vol_down',
@@ -64,7 +64,7 @@ export const KEY_DEFS: KeyDef[] = [
       longMs: 'vol_down_long_press_ms',
       repeat: 'vol_down_long_repeat',
     },
-    defaults: { enabled: '1', single: 'native', double: 'none', long: 'none', longMs: '600', repeat: '0' },
+    defaults: { enabled: '0', single: 'native', double: 'none', long: 'none', longMs: '500', repeat: '0' },
   },
 ];
 

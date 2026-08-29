@@ -512,7 +512,7 @@ async function diagnostics(): Promise<void> {
       `echo; echo '── daemon ──'; ` +
       `ps -A -o pid,etime,args 2>/dev/null | grep '[p]luskeyd' || echo 'pluskeyd 未运行'; ` +
       `echo; echo '── 配置 (${quote(CONFIG)}) ──'; cat '${quote(CONFIG)}' 2>&1; ` +
-      `echo; echo '── 模块文件 ──'; ls -l '${quote(MODDIR)}/bin' '${quote(MODDIR)}/config' 2>&1; ` +
+      `echo; echo '── 模块文件 ──'; ls -l '${quote(MODDIR)}/bin' '${quote(CONFIG_DIR)}' 2>&1; ` +
       `echo; echo '── daemon 日志（最近 40 行）──'; ` +
       `if [ -f '${quote(LOGFILE)}' ]; then tail -40 '${quote(LOGFILE)}'; else echo 'pluskey.log 不存在'; fi`;
     const cmd = `( ${rawCmd} ) | base64 | tr -d '\\n\\r'`;

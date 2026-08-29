@@ -21,9 +21,12 @@
 #include <unistd.h>
 
 #define DEFAULT_MODDIR "/data/adb/modules/OPlusKey"
+/* 配置文件必须放在模块目录之外：
+ * Magisk / KernelSU 更新模块时会重建整个模块目录，放在里面会被刷掉 */
+#define DEFAULT_DATADIR "/data/adb/OPlusKey"
 #define INPUT_DIR "/dev/input"
 #define UINPUT_DEVICE "/dev/uinput"
-#define DEFAULT_LONG_PRESS_MS 600
+#define DEFAULT_LONG_PRESS_MS 500
 #define DEFAULT_DOUBLE_CLICK_MS 300
 #define DEFAULT_REPEAT_INTERVAL_MS 300
 #define DEFAULT_VIBRATION 0
@@ -119,17 +122,17 @@ static int g_lock_fd = -1;
 static FILE *g_log = NULL;
 static struct key_ctx g_keys[KID_COUNT] = {
     { .code = BTN_TRIGGER_HAPPY32, .name = "plus",
-      .cfg = { .single = "none", .double_action = "none", .long_action = "none",
-               .long_press_ms = 600, .long_repeat = 0 } },
+      .cfg = { .single = "native", .double_action = "none", .long_action = "none",
+               .long_press_ms = 500, .long_repeat = 0, .enabled = 0 }, .native = 1 },
     { .code = KEY_VOLUMEUP, .name = "vol_up",
       .cfg = { .single = "native", .double_action = "none", .long_action = "none",
-               .long_press_ms = 600, .long_repeat = 0 }, .native = 1 },
+               .long_press_ms = 500, .long_repeat = 0, .enabled = 0 }, .native = 1 },
     { .code = KEY_VOLUMEDOWN, .name = "vol_down",
       .cfg = { .single = "native", .double_action = "none", .long_action = "none",
-               .long_press_ms = 600, .long_repeat = 0 }, .native = 1 },
+               .long_press_ms = 500, .long_repeat = 0, .enabled = 0 }, .native = 1 },
     { .code = KEY_POWER, .name = "power",
       .cfg = { .single = "native", .double_action = "none", .long_action = "none",
-               .long_press_ms = 800, .long_repeat = 0 }, .native = 1 },
+               .long_press_ms = 500, .long_repeat = 0, .enabled = 0 }, .native = 1 },
 };
 static int g_double_click_ms = DEFAULT_DOUBLE_CLICK_MS;
 static int g_repeat_interval_ms = DEFAULT_REPEAT_INTERVAL_MS;
@@ -143,9 +146,10 @@ static int g_device_count = 0;
 static unsigned char g_key_bits[KEY_BYTES]; /* 所有被独占设备的 KEY 能力合集，用于 uinput */
 
 static char g_moddir[PATH_MAX];
-static char g_config_dir[PATH_MAX];
+static char g_data_dir[PATH_MAX];
 static char g_run_dir[PATH_MAX];
 static char g_config_file[PATH_MAX];
+static char g_legacy_config_file[PATH_MAX]; /* 旧版本的模块内配置，仅用于一次性迁移 */
 static char g_log_file[PATH_MAX];
 static char g_pid_file[PATH_MAX];
 static char g_lock_file[PATH_MAX];
@@ -184,9 +188,10 @@ static void resolve_paths(void)
         g_moddir_fallback = 1;
     }
 
-    snprintf(g_config_dir, sizeof(g_config_dir), "%s/config", g_moddir);
+    snprintf(g_data_dir, sizeof(g_data_dir), "%s", DEFAULT_DATADIR);
     snprintf(g_run_dir, sizeof(g_run_dir), "%s/run", g_moddir);
-    snprintf(g_config_file, sizeof(g_config_file), "%s/config/config.conf", g_moddir);
+    snprintf(g_config_file, sizeof(g_config_file), "%s/config.conf", g_data_dir);
+    snprintf(g_legacy_config_file, sizeof(g_legacy_config_file), "%s/config/config.conf", g_moddir);
     snprintf(g_log_file, sizeof(g_log_file), "%s/pluskey.log", g_moddir);
     snprintf(g_pid_file, sizeof(g_pid_file), "%s/run/pluskeyd.pid", g_moddir);
     snprintf(g_lock_file, sizeof(g_lock_file), "%s/run/pluskeyd.lock", g_moddir);
@@ -264,32 +269,21 @@ static void set_key_defaults(struct config_data *c)
     c->vibration = DEFAULT_VIBRATION;
     for (i = 0; i < KID_COUNT; i++) {
         struct key_config *k = &c->keys[i];
-        switch (i) {
-        case KID_PLUS:
-            snprintf(k->single, ACTION_MAX, "none");
-            k->long_press_ms = 600;
-            break;
-        case KID_POWER:
-            snprintf(k->single, ACTION_MAX, "native");
-            k->long_press_ms = 800;
-            break;
-        default:
-            snprintf(k->single, ACTION_MAX, "native");
-            k->long_press_ms = 600;
-            break;
-        }
+        /* 默认全部保留原始行为：启用位为 0（等同 native），
+         * 单击=native，长按阈值统一 500ms，持续触发关闭 */
+        snprintf(k->single, ACTION_MAX, "native");
         snprintf(k->double_action, ACTION_MAX, "none");
         snprintf(k->long_action, ACTION_MAX, "none");
+        k->long_press_ms = DEFAULT_LONG_PRESS_MS;
         k->long_repeat = 0;
-        k->enabled = 1;
+        k->enabled = 0;
     }
 }
 
 static int create_default_config(void)
 {
     FILE *fp;
-    mkdir(g_moddir, 0755);
-    mkdir(g_config_dir, 0755);
+    mkdir(g_data_dir, 0755);
     fp = fopen(g_config_file, "w");
     if (!fp) {
         log_msg("ERROR: cannot create config errno=%d (%s)\n", errno, strerror(errno));
@@ -307,32 +301,32 @@ static int create_default_config(void)
         "vibrate=0\n"
         "\n"
         "# 侧键 (Plus Key)\n"
-        "plus_enabled=1\n"
-        "long_press_ms=600\n"
-        "single=none\n"
+        "plus_enabled=0\n"
+        "long_press_ms=500\n"
+        "single=native\n"
         "double=none\n"
         "long=none\n"
         "long_repeat=0\n"
         "\n"
         "# 电源键 (注意: 长按连发会屏蔽系统自带的电源长按菜单)\n"
-        "power_enabled=1\n"
-        "power_long_press_ms=800\n"
+        "power_enabled=0\n"
+        "power_long_press_ms=500\n"
         "power_single=native\n"
         "power_double=none\n"
         "power_long=none\n"
         "power_long_repeat=0\n"
         "\n"
         "# 音量+\n"
-        "vol_up_enabled=1\n"
-        "vol_up_long_press_ms=600\n"
+        "vol_up_enabled=0\n"
+        "vol_up_long_press_ms=500\n"
         "vol_up_single=native\n"
         "vol_up_double=none\n"
         "vol_up_long=none\n"
         "vol_up_long_repeat=0\n"
         "\n"
         "# 音量-\n"
-        "vol_down_enabled=1\n"
-        "vol_down_long_press_ms=600\n"
+        "vol_down_enabled=0\n"
+        "vol_down_long_press_ms=500\n"
         "vol_down_single=native\n"
         "vol_down_double=none\n"
         "vol_down_long=none\n"
@@ -612,16 +606,77 @@ static void apply_config(const struct config_data *cfg)
     }
 }
 
+/* 小文件拷贝，成功返回 0 */
+static int copy_file(const char *src, const char *dst)
+{
+    char buf[4096];
+    FILE *in;
+    FILE *out;
+    size_t n;
+    int ret = -1;
+
+    in = fopen(src, "r");
+    if (!in) {
+        return -1;
+    }
+    out = fopen(dst, "w");
+    if (!out) {
+        fclose(in);
+        return -1;
+    }
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+        if (fwrite(buf, 1, n, out) != n) {
+            goto out;
+        }
+    }
+    if (ferror(in)) {
+        goto out;
+    }
+    ret = 0;
+out:
+    if (fflush(out) != 0) {
+        ret = -1;
+    }
+    fclose(in);
+    fclose(out);
+    if (ret == 0) {
+        chmod(dst, 0600);
+    }
+    return ret;
+}
+
+/*
+ * 旧版本把配置放在模块目录里，更新模块时会被清掉。
+ * 新版首次启动时把那份配置搬到 /data/adb/OPlusKey 继续用，
+ * 模块目录里的旧文件保留不动（万一要回滚），但不再读取。
+ */
+static void migrate_legacy_config(void)
+{
+    if (access(g_config_file, F_OK) == 0) {
+        return;
+    }
+    if (access(g_legacy_config_file, F_OK) != 0) {
+        return;
+    }
+    mkdir(g_data_dir, 0755);
+    if (copy_file(g_legacy_config_file, g_config_file) == 0) {
+        log_msg("CONFIG migrated from %s to %s\n", g_legacy_config_file, g_config_file);
+    } else {
+        log_msg("CONFIG migration failed errno=%d (%s)\n", errno, strerror(errno));
+    }
+}
+
 static int load_config(void)
 {
     struct config_data cfg;
     log_msg("CONFIG LOAD START\n");
+    migrate_legacy_config();
     if (access(g_config_file, F_OK) != 0) {
         if (errno != ENOENT) {
             log_msg("CONFIG access failed errno=%d (%s)\n", errno, strerror(errno));
             return -1;
         }
-        log_msg("CONFIG missing, creating default\n");
+        log_msg("CONFIG missing, creating default at %s\n", g_config_file);
         if (create_default_config() != 0) {
             return -1;
         }
@@ -1401,6 +1456,7 @@ int main(void)
     resolve_paths();
     log_open();
     log_msg("\n==============================================\npluskeyd starting\nPID=%d\nmoddir=%s\n==============================================\n", getpid(), g_moddir);
+    log_msg("config=%s\n", g_config_file);
     if (g_moddir_fallback) {
         log_msg("WARNING: moddir derive from /proc/self/exe failed, using default %s\n", DEFAULT_MODDIR);
     }

@@ -14,9 +14,11 @@ export const MODDIR = (() => {
   return '/data/adb/modules/OPlusKey';
 })();
 
-export const CONFIG = `${MODDIR}/config/config.conf`;
-export const DEBUG = `${MODDIR}/webui-debug.log`;
-export const CONFIG_DIR = `${MODDIR}/config`;
+// 配置放在模块目录之外：更新模块会重建模块目录，放里面会被刷掉
+export const DATA_DIR = '/data/adb/OPlusKey';
+export const CONFIG = `${DATA_DIR}/config.conf`;
+export const DEBUG = `${DATA_DIR}/webui-debug.log`;
+export const CONFIG_DIR = DATA_DIR;
 export const LOGFILE = `${MODDIR}/pluskey.log`;
 
 type ExecFn = (cmd: string) => Promise<unknown>;

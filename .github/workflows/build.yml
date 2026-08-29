@@ -3,7 +3,7 @@ name: build
 on:
   push:
     branches: [master, main, dev]
-    tags: ['v*']
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -15,24 +15,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # changelog 要 diff 上一个 tag，浅克隆拿不到
+          fetch-depth: 0
 
       - name: Inject version from tag
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           VERSION="$GITHUB_REF_NAME"
-          # versionCode 由 tag 语义化版本计算：vX.Y.Z → X*10000 + Y*100 + Z
-          # 必须随版本单调递增（历史 versionCode 已到 102，不能用提交数）
+          # versionCode 由 tag 语义化版本计算：vX.Y.Z[-后缀] → X*10000 + Y*100 + Z
+          # 必须随版本单调递增（v1.0.0/1.0.1 用过提交数 100/101，已弃用）
           BASE="${VERSION#v}"
+          BASE="${BASE%%-*}" # 去掉 -beta 等预发布后缀
           MAJOR="${BASE%%.*}"; REST="${BASE#*.}"
-          MINOR="${REST%%.*}"; PATCH="${REST#*.}"; PATCH="${PATCH%%.*}"
+          MINOR="${REST%%.*}"; REST="${REST#*.}"
+          PATCH="${REST%%.*}"
           case "$MAJOR$MINOR$PATCH" in
-            ''|*[!0-9]*) echo "::error::tag 必须形如 v主.次.修订 (如 v1.0.3-beta)"; exit 1;;
+            ''|*[!0-9]*) echo "::error::tag 必须形如 v主.次.修订[-后缀] (如 v1.0.2-beta)"; exit 1;;
           esac
           VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
           sed -i "s/^version=.*/version=$VERSION/" module/module.prop
           sed -i "s/^versionCode=.*/versionCode=$VERSION_CODE/" module/module.prop
+          # 生成 changelog.md（自上一个 tag 以来的提交），作为附件供管理器渲染
+          # HEAD 就在当前 tag 上，必须排除掉才能拿到上一个 tag，
+          # 否则 git log "$PREV_TAG..HEAD" 是空范围，changelog 只有标题
+          PREV_TAG=$(git describe --tags --abbrev=0 --exclude="$GITHUB_REF_NAME" 2>/dev/null || true)
+          {
+            echo "## $VERSION"
+            echo
+            if [ -n "$PREV_TAG" ]; then
+              git log --pretty=format:'- %s' "$PREV_TAG..HEAD"
+            else
+              git log --pretty=format:'- %s' HEAD
+            fi
+          } > changelog.md
           jq --arg v "$VERSION" --argjson c "$VERSION_CODE" \
-             '.version = $v | .versionCode = $c | .changelog = ("https://github.com/lo0kie/OPlusKey/releases/tag/" + $v)' \
+             '.version = $v | .versionCode = $c | .changelog = "https://github.com/lo0kie/OPlusKey/releases/latest/download/changelog.md"' \
              update.json > update.json.tmp && mv update.json.tmp update.json
           echo "version=$VERSION versionCode=$VERSION_CODE"
 
@@ -63,7 +81,9 @@ jobs:
       # releases/latest/download/update.json，读到的是最新 Release 的真实版本
       - name: Collect release files
         if: startsWith(github.ref, 'refs/tags/v')
-        run: cp update.json dist/update.json
+        run: |
+          cp update.json dist/update.json
+          cp changelog.md dist/changelog.md
 
       # Artifact 本身会被 GitHub 打包一次，上传解压后的模块文件，
       # 下载得到的就是可直接刷入的 zip，不会出现 zip 套 zip
@@ -81,6 +101,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          # Release 页面正文用生成好的 changelog，否则说明栏是空的
+          body_path: dist/changelog.md
           files: |
             dist/OPlusKey-*.zip
             dist/update.json
+            dist/changelog.md
