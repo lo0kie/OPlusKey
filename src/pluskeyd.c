@@ -588,9 +588,11 @@ static void apply_config(const struct config_data *cfg)
         snprintf(k->cfg.long_action, ACTION_MAX, "%s", c->long_action);
         k->cfg.long_press_ms = c->long_press_ms;
         k->cfg.long_repeat = c->long_repeat;
-        /* 每键连发间隔缺省时回退到全局 long_repeat_interval_ms */
-        k->cfg.long_repeat_interval_ms =
-            c->long_repeat_interval_ms ? c->long_repeat_interval_ms : cfg->repeat_interval_ms;
+        /* 每键连发间隔：缺省回退全局值，越界一律收敛到合法区间，0 不允许 */
+        k->cfg.long_repeat_interval_ms = c->long_repeat_interval_ms ? c->long_repeat_interval_ms : cfg->repeat_interval_ms;
+        if (k->cfg.long_repeat_interval_ms < MIN_REPEAT_INTERVAL_MS || k->cfg.long_repeat_interval_ms > MAX_REPEAT_INTERVAL_MS) {
+            k->cfg.long_repeat_interval_ms = DEFAULT_REPEAT_INTERVAL_MS;
+        }
         k->cfg.enabled = c->enabled;
         /* 禁用的按键等同 native：不独占、不处理 */
         k->native = !c->enabled ||
@@ -1391,6 +1393,9 @@ static void key_timeout(struct key_ctx *k)
         log_msg("%s LONG PRESS TRIGGERED (>= %d ms)\n", k->name, k->cfg.long_press_ms);
         k->long_triggered = 1;
         key_fire_long(k, 0);
+        /* 连发间隔从长按触发这一刻起算，否则第一下连发会在
+         * (间隔 - 长按阈值) 后立刻触发，看起来像是没生效 */
+        k->press_start = now_ms();
         return;
     }
     if (k->state == STATE_PRESSED && k->long_triggered) {

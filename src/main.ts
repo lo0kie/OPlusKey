@@ -13,7 +13,7 @@ import {
   uiLog,
   writeDebugFile,
 } from './api';
-import { KEY_DEFS, applyParsedConfig, buildConfigText, makeDefaultConfig, parse, state } from './config';
+import { KEY_DEFS, applyParsedConfig, buildConfigText, clampNum, makeDefaultConfig, parse, state } from './config';
 import './style.css';
 import { applyTheme, hasSystemPrimary } from './theme';
 
@@ -285,6 +285,12 @@ function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
     state[def.keys.longMs] = longMs.value.replace(/[^\d]/g, '');
     debouncedSave();
   });
+  longMs.addEventListener('change', () => {
+    // 失焦即收敛到合法区间，0 之类的非法输入立刻变成下限
+    longMs.value = String(clampNum(longMs.value, 100, 10000, Number(def.defaults.longMs)));
+    state[def.keys.longMs] = longMs.value;
+    debouncedSave();
+  });
   repeat.addEventListener('change', () => {
     state[def.keys.repeat] = repeat.checked ? '1' : '0';
     syncRepeatRow();
@@ -292,6 +298,12 @@ function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
   });
   repeatInterval.addEventListener('input', () => {
     state[def.keys.repeatInterval] = repeatInterval.value.replace(/[^\d]/g, '');
+    debouncedSave();
+  });
+  repeatInterval.addEventListener('change', () => {
+    // 连续触发间隔下限 100ms，防疯狂触发
+    repeatInterval.value = String(clampNum(repeatInterval.value, 100, 5000, 300));
+    state[def.keys.repeatInterval] = repeatInterval.value;
     debouncedSave();
   });
   function syncBody(): void {
@@ -381,9 +393,9 @@ function syncAllInputs(): void {
     const refs = cardRefs.get(def.id)!;
     refs.enabled.checked = state[def.keys.enabled] !== '0';
     refs.body.style.display = refs.enabled.checked ? '' : 'none';
-    refs.longMs.value = state[def.keys.longMs];
+    refs.longMs.value = String(clampNum(state[def.keys.longMs], 100, 10000, Number(def.defaults.longMs)));
     refs.repeat.checked = state[def.keys.repeat] === '1';
-    refs.repeatInterval.value = state[def.keys.repeatInterval];
+    refs.repeatInterval.value = String(clampNum(state[def.keys.repeatInterval], 100, 5000, 300));
     actions[def.keys.single].set(state[def.keys.single]);
     actions[def.keys.double].set(state[def.keys.double]);
     actions[def.keys.long].set(state[def.keys.long]);
