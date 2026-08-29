@@ -1312,7 +1312,8 @@ static void key_up(struct key_ctx *k)
         k->long_triggered = 0;
         return;
     }
-    if (duration >= k->cfg.long_press_ms) {
+    /* 长按为 none/native 时不做长按判定，按单击/双击流程走 */
+    if (duration >= k->cfg.long_press_ms && !action_is_noop(k->cfg.long_action)) {
         key_fire_long(k, 0);
         k->state = STATE_IDLE;
         k->second_press = 0;
@@ -1344,6 +1345,10 @@ static long long key_timeout_ms(struct key_ctx *k)
 {
     if (k->state == STATE_PRESSED) {
         if (!k->long_triggered) {
+            /* 长按为 none/native 时不武装长按定时器，也不吞单击 */
+            if (action_is_noop(k->cfg.long_action)) {
+                return -1;
+            }
             long long remain = (long long)k->cfg.long_press_ms - (now_ms() - k->press_start);
             return remain > 0 ? remain : 0;
         }

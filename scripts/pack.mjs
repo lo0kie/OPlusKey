@@ -21,9 +21,11 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const moduleDir = join(root, 'module');
@@ -59,6 +61,13 @@ for (const f of ['update-binary', 'updater-script']) {
 // 不打配置：默认配置由 daemon 在 /data/adb/OPlusKey/config.conf 首次启动时生成
 // WebUI 构建产物（vite 输出到 dist/webroot）
 cpSync(join(root, 'dist', 'webroot'), join(staging, 'webroot'), { recursive: true });
+
+// launch.png：管理器显示的模块图标，由 public/icon.svg 渲染到 zip 根目录
+const launchPng = await sharp(join(root, 'public', 'icon.svg'), { density: 341 })
+  .resize(512, 512)
+  .png()
+  .toBuffer();
+writeFileSync(join(staging, 'launch.png'), launchPng);
 
 // daemon 二进制：C 构建产物，位于 module/bin/；检查存在性与新鲜度
 const binSrc = join(moduleDir, 'bin', 'pluskeyd');

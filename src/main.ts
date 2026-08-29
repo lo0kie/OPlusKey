@@ -273,7 +273,9 @@ function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
     body.style.display = enabled.checked ? '' : 'none';
   }
   function syncTimingRow(): void {
-    $(def.id + 'Timing').style.display = is_action_none(state[def.keys.long]) ? 'none' : '';
+    const v = state[def.keys.long];
+    const noop = !v || v === 'none' || v === 'native';
+    $(def.id + 'Timing').style.display = noop ? 'none' : '';
   }
   enabled.addEventListener('change', () => {
     state[def.keys.enabled] = enabled.checked ? '1' : '0';
@@ -284,11 +286,6 @@ function buildKeyCard(def: (typeof KEY_DEFS)[number]): KeyCardRefs {
   syncBody();
   syncTimingRow();
   return { longMs, repeat, enabled, body, syncTimingRow };
-}
-
-/* 与 config.ts 的 is_action_none 语义一致：none 或空字符串 */
-function is_action_none(v: string | undefined): boolean {
-  return !v || v === 'none';
 }
 
 uiLog('开始构建按键配置卡片');
