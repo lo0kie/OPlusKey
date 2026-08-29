@@ -1,0 +1,6 @@
+{
+  "version": "v1.0.1-beta",
+  "versionCode": 101,
+  "zipUrl": "https://github.com/lo0kie/OPlusKey/releases/latest/download/OPlusKey-latest.zip",
+  "changelog": "新增模块自动更新配置；修复 zip 内 daemon 权限（customize.sh + 权限自修）；daemon 稳定性修复（日志 fd CLOEXEC、SIGPIPE 重置、长按注入互斥与僵尸收割、配置行缓冲）。"
+}

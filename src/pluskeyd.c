@@ -49,6 +49,7 @@ static const int FORWARD_TYPES[] = { EV_SYN, EV_KEY, EV_MSC, EV_LED, EV_SND, EV_
 
 static void uinput_destroy(void);
 static int uinput_setup(void);
+static void reset_child_signals(void);
 
 enum key_id {
     KID_PLUS,
@@ -134,6 +135,7 @@ static int g_double_click_ms = DEFAULT_DOUBLE_CLICK_MS;
 static int g_repeat_interval_ms = DEFAULT_REPEAT_INTERVAL_MS;
 static int g_longpress_hold_ms = DEFAULT_LONGPRESS_HOLD_MS;
 static int g_vibration = DEFAULT_VIBRATION;
+static int g_moddir_fallback = 0; /* /proc/self/exe 推导失败，退回 DEFAULT_MODDIR */
 static long long g_config_mtime_ns = 0;
 static off_t g_config_size = 0;
 static struct input_device g_devices[MAX_DEVICES];
@@ -147,6 +149,7 @@ static char g_config_file[PATH_MAX];
 static char g_log_file[PATH_MAX];
 static char g_pid_file[PATH_MAX];
 static char g_lock_file[PATH_MAX];
+static pid_t g_longpress_child_pid = 0; /* 正在注入长按的子进程，防止并发交错 */
 
 /*
  * 从 /proc/self/exe 推导模块目录（可执行文件位于 <moddir>/bin/pluskeyd），
@@ -158,6 +161,7 @@ static void resolve_paths(void)
     char *slash;
     ssize_t len;
 
+    int derived = 0;
     snprintf(g_moddir, sizeof(g_moddir), "%s", DEFAULT_MODDIR);
 
     len = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
@@ -171,9 +175,13 @@ static void resolve_paths(void)
                 *slash = '\0';
                 if (exe[0] == '/') {
                     snprintf(g_moddir, sizeof(g_moddir), "%s", exe);
+                    derived = 1;
                 }
             }
         }
+    }
+    if (!derived) {
+        g_moddir_fallback = 1;
     }
 
     snprintf(g_config_dir, sizeof(g_config_dir), "%s/config", g_moddir);
@@ -191,11 +199,20 @@ static long long now_ms(void)
     return (long long)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
 }
 
+/* 日志 fd 必须 CLOEXEC：fork 出的子进程（sh/am/input 等）不应继承日志文件的写句柄 */
+static void set_cloexec(FILE *fp)
+{
+    if (fp) {
+        fcntl(fileno(fp), F_SETFD, FD_CLOEXEC);
+    }
+}
+
 static void log_open(void)
 {
     g_log = fopen(g_log_file, "a");
     if (g_log) {
         setvbuf(g_log, NULL, _IOLBF, 0);
+        set_cloexec(g_log);
     }
 }
 
@@ -220,6 +237,7 @@ static void log_msg(const char *fmt, ...)
             freopen(g_log_file, "w", g_log);
             if (g_log) {
                 setvbuf(g_log, NULL, _IOLBF, 0);
+                set_cloexec(g_log);
                 fprintf(g_log, "=== log rotated (limit %dMB) ===\n", LOG_MAX_MB);
             }
         }
@@ -422,7 +440,7 @@ static int get_config_stat(long long *mtime_ns, off_t *size)
 static int parse_config_file(struct config_data *cfg)
 {
     FILE *fp;
-    char line[1024];
+    char line[2048]; /* 行内容含 key + 512 的 value，留足余量避免长命令被 fgets 截断 */
     set_key_defaults(cfg);
     fp = fopen(g_config_file, "r");
     if (!fp) {
@@ -972,6 +990,7 @@ static void vibration_feedback(void)
         return;
     }
     if (pid == 0) {
+        reset_child_signals();
         int nullfd = open("/dev/null", O_RDWR);
         if (nullfd >= 0) {
             dup2(nullfd, STDIN_FILENO);
@@ -995,6 +1014,13 @@ static void vibration_feedback(void)
     }
 }
 
+/* 子进程 exec 前恢复默认信号处置：SIG_IGN 会跨 exec 传递，
+ * 否则用户 shell 命令里的管道写将拿到 EPIPE 而不是 SIGPIPE */
+static void reset_child_signals(void)
+{
+    signal(SIGPIPE, SIG_DFL);
+}
+
 static void reap_children(void)
 {
     int status;
@@ -1002,6 +1028,9 @@ static void reap_children(void)
         pid_t pid = waitpid(-1, &status, WNOHANG);
         if (pid <= 0) {
             break;
+        }
+        if (pid == g_longpress_child_pid) {
+            g_longpress_child_pid = 0;
         }
         if (WIFEXITED(status)) {
             log_msg("CHILD pid=%d exited status=%d\n", pid, WEXITSTATUS(status));
@@ -1024,16 +1053,30 @@ static void uinput_longpress(int code)
         log_msg("LONGPRESS inject unavailable: uinput disabled\n");
         return;
     }
+    /* 僵尸态的 kill(pid, 0) 仍返回 0，先主动收割已退出的注入子进程再判断 */
+    if (g_longpress_child_pid > 0) {
+        int wr = waitpid(g_longpress_child_pid, NULL, WNOHANG);
+        if (wr == g_longpress_child_pid || (wr < 0 && errno == ECHILD)) {
+            g_longpress_child_pid = 0;
+        }
+    }
+    /* 上一次注入仍在进行时跳过，避免多个子进程往同一 uinput 交错写不成对的 down/up */
+    if (g_longpress_child_pid > 0 && kill(g_longpress_child_pid, 0) == 0) {
+        log_msg("LONGPRESS inject skipped: previous injection (pid=%d) still running\n", g_longpress_child_pid);
+        return;
+    }
     pid = fork();
     if (pid < 0) {
         log_msg("LONGPRESS fork failed errno=%d (%s)\n", errno, strerror(errno));
         return;
     }
     if (pid > 0) {
+        g_longpress_child_pid = pid;
         log_msg("LONGPRESS inject child pid=%d code=%d hold=%dms\n", pid, code, g_longpress_hold_ms);
         return;
     }
     /* 子进程执行注入 */
+    reset_child_signals();
     {
         int i;
         int repeats = g_longpress_hold_ms / 100;
@@ -1095,6 +1138,7 @@ static void execute_action(const char *action)
     }
     if (pid == 0) {
         setsid();
+        reset_child_signals();
         int nullfd = open("/dev/null", O_RDWR);
         if (nullfd >= 0) {
             dup2(nullfd, STDIN_FILENO);
@@ -1357,6 +1401,9 @@ int main(void)
     resolve_paths();
     log_open();
     log_msg("\n==============================================\npluskeyd starting\nPID=%d\nmoddir=%s\n==============================================\n", getpid(), g_moddir);
+    if (g_moddir_fallback) {
+        log_msg("WARNING: moddir derive from /proc/self/exe failed, using default %s\n", DEFAULT_MODDIR);
+    }
     if (acquire_lock() != 0) {
         log_msg("pluskeyd: duplicate instance refused\n");
         log_close();

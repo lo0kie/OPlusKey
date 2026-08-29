@@ -4,6 +4,9 @@ MODDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 DAEMON="$MODDIR/bin/pluskeyd"
 LOG="$MODDIR/pluskey.log"
 
+# 权限自修（部分管理器解压不保留权限位）
+chmod 755 "$DAEMON" 2>/dev/null
+
 echo "=============================================="
 echo "       OnePlus 15 Plus Key 重启服务"
 echo "=============================================="

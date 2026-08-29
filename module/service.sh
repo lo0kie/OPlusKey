@@ -10,6 +10,10 @@ CONFIG="$MODDIR/config/config.conf"
 mkdir -p "$PIDDIR"
 mkdir -p "$MODDIR/config"
 
+# 部分管理器解压不保留权限位，每次启动前自修（以 root 运行，必然生效）
+chmod 755 "$DAEMON" "$MODDIR/restart.sh" "$MODDIR/uninstall.sh" 2>/dev/null
+chmod 644 "$MODDIR/module.prop" "$CONFIG" 2>/dev/null
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOGFILE"
 }
