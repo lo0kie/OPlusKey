@@ -1,0 +1,13 @@
+# 依赖
+node_modules/
+
+# 构建产物（pnpm build / pack:module 重新生成）
+/dist/
+/module/bin/*
+!/module/bin/.gitkeep
+
+# 日志与临时文件
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

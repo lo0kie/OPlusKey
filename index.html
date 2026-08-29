@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN" class="dark" style="color-scheme: dark; background-color: #111318">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#111318" id="theme-color" />
+    <title>OPlusKey</title>
+    <link rel="stylesheet" href="https://mui.kernelsu.org/internal/insets.css" />
+    <!-- KSU 管理器拦截此路径注入 Monet 动态色变量（需 KSU 开启动态取色/Material 模式） -->
+    <link rel="stylesheet" href="internal/colors.css" />
+    <script>
+      // 提前锁定根节点颜色，防止白屏闪烁与状态栏错色
+      (() => {
+        document.documentElement.style.colorScheme = 'dark';
+        const BG = '#111318';
+        const root = document.documentElement;
+        const themeMeta = document.getElementById('theme-color');
+        root.classList.add('dark');
+        root.dataset.theme = 'dark';
+        root.style.colorScheme = 'dark';
+        root.style.backgroundColor = BG;
+        if (themeMeta) themeMeta.setAttribute('content', BG);
+        const applyBodyBackground = () => {
+          if (!document.body) return;
+          document.body.style.margin = '0';
+          document.body.style.backgroundColor = BG;
+        };
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', applyBodyBackground, { once: true });
+        } else {
+          applyBodyBackground();
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hero">
+        <div class="title">OPlusKey</div>
+        <div class="sub">配置侧键、电源键与音量键的单击、双击与长按行为</div>
+      </div>
+      <div id="keyCards"></div>
+      <div class="card">
+        <div class="section-title">其他</div>
+        <div class="switch-row">
+          <div class="switch-info">
+            <div class="switch-title">Monet 动态取色</div>
+            <div class="switch-sub">跟随系统配色</div>
+          </div>
+          <label class="switch">
+            <input id="monetInput" type="checkbox" />
+            <span class="switch-track">
+              <span class="switch-thumb"></span>
+            </span>
+          </label>
+        </div>
+        <div class="switch-row">
+          <div class="switch-info">
+            <div class="switch-title">振动反馈</div>
+            <div class="switch-sub">执行动作时提供轻微振动反馈</div>
+          </div>
+          <label class="switch">
+            <input id="vibrateInput" type="checkbox" />
+            <span class="switch-track">
+              <span class="switch-thumb"></span>
+            </span>
+          </label>
+        </div>
+        <div class="switch-row">
+          <div class="switch-info">
+            <div class="switch-title">调试模式</div>
+            <div class="switch-sub">显示运行日志与诊断工具</div>
+          </div>
+          <label class="switch">
+            <input id="debugInput" type="checkbox" />
+            <span class="switch-track">
+              <span class="switch-thumb"></span>
+            </span>
+          </label>
+        </div>
+      </div>
+      <div class="card" id="debugCard" hidden>
+        <div class="buttons">
+          <button class="btn" type="button" id="reload"><span class="msr">refresh</span>重新读取</button>
+          <button class="btn" type="button" id="diagnose"><span class="msr">bug_report</span>收集诊断</button>
+        </div>
+        <div class="log" id="log" hidden></div>
+      </div>
+      <div class="card status-card">
+        <div class="status">
+          <span class="dot" id="dot"></span>
+          <span id="statusText">页面脚本尚未启动</span>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
