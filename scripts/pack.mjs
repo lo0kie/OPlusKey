@@ -161,17 +161,8 @@ await new Promise((resolve, reject) => {
 });
 rmSync(staging, { recursive: true, force: true });
 
-// 固定名副本：只给 release 生成，模块管理器的 updateJson 指向它做自动更新。
-// debug 是自用包，不参与自动更新，也就不生成 latest 别名（避免覆盖 release 的）。
-if (!DEBUG) {
-  copyFileSync(zipPath, join(distDir, `${id}-latest.zip`));
-}
-
 console.log('[3/3] 完成');
 console.log(`\n变体: ${VARIANT}${DEBUG ? '（含日志与 WebUI 调试面板）' : '（无日志）'}`);
 console.log(`产物: dist/${zipName} (${(statSync(zipPath).size / 1024).toFixed(1)} KB)`);
-if (!DEBUG) {
-  console.log(`      dist/${id}-latest.zip（自动更新用，文件名固定）`);
-}
 console.log('包内结构: module.prop, 脚本, META-INF/, webroot/, bin/');
 console.log('不含: src/, 源码, 构建脚本, node_modules');

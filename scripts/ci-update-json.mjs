@@ -77,8 +77,10 @@ const repoBase = base || 'https://github.com/<owner>/<repo>/releases';
 const update = {
   version,
   versionCode,
-  // 固定名别名：latest Release 里的 <id>-latest.zip，由 pack.mjs 为 release 变体生成
-  zipUrl: `${repoBase}/latest/download/${id}-latest.zip`,
+  // 指向版本化的 zip，与 Release 里的文件名一致。
+  // 不用固定名别名（如 OPlusKey-latest.zip）——那会让 Release 里多一个与版本化包
+  // 内容完全相同的文件。走 /releases/latest/ 前缀，URL 本身就会随最新版变化。
+  zipUrl: `${repoBase}/latest/download/${id}-${version}.zip`,
   // changelog 同样走 latest 别名：管理器会抓这个文件、渲染进更新对话框。
   // 内容来自 scripts/ci-changelog.mjs 生成的 changelog.md，CI 上传为 Release asset。
   changelog: `${repoBase}/latest/download/changelog.md`,

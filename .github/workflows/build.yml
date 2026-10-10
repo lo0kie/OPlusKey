@@ -6,9 +6,9 @@ on:
   pull_request:
     # 纯文档改动不跑构建
     paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - "LICENSE"
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   workflow_dispatch:
 
 # 同一分支的重复推送只保留最新一次
@@ -113,15 +113,20 @@ jobs:
           pnpm ci:changelog
           pnpm ci:update-json
 
-      # Release 放四样：两个 zip + update.json + changelog.md
+      # 四样发布物先收拢到一个目录再上传。
+      # 不能让 upload-artifact 直接吃 dist/*.zip + 根目录的 changelog.md：
+      # 它按所有路径的最长公共目录裁剪，结果是 artifact 里带着 dist/ 子目录，
+      # 下游 download-artifact 再落回 dist/ 就变成了 dist/dist/，全乱套。
+      - name: Collect release payload
+        run: |
+          mkdir -p dist/release
+          cp dist/OPlusKey-*.zip dist/update.json changelog.md dist/release/
       - name: Upload release payload
         uses: actions/upload-artifact@v7
         with:
           name: release
-          path: |
-            dist/OPlusKey-*.zip
-            dist/update.json
-            changelog.md
+          # 传目录内部内容：artifact 解出来就是扁平的四个文件
+          path: dist/release
           retention-days: 7
 
   # 推送到 master/main 即发版，版本号取自 module.prop
@@ -133,6 +138,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      # 解到 dist/，得到 dist/OPlusKey-<版本>.zip 等四个文件（扁平的）
       - uses: actions/download-artifact@v8
         with:
           name: release
@@ -141,8 +147,13 @@ jobs:
       - name: Resolve version for release
         id: ver
         run: |
-          # 版本号从打包产物名推导：dist/OPlusKey-v<版本>.zip（排除 debug 包）
+          # 版本号从打包产物名推导：dist/OPlusKey-<版本>.zip（排除 debug 包）
           f=$(ls dist/OPlusKey-v*.zip | grep -v -- '-debug' | head -1)
+          if [ -z "$f" ]; then
+            echo "::error::没有找到 release zip（dist/OPlusKey-v*.zip），无法确定版本号"
+            ls -la dist
+            exit 1
+          fi
           ver=$(basename "$f" .zip | sed 's/^OPlusKey-//')
           echo "version=$ver" >> "$GITHUB_OUTPUT"
           echo "解析到版本：$ver"
@@ -154,11 +165,11 @@ jobs:
           tag_name: ${{ steps.ver.outputs.version }}
           name: ${{ steps.ver.outputs.version }}
           # Release 说明栏用生成的 changelog，避免正文空白
-          body_path: changelog.md
+          body_path: dist/changelog.md
           # 四样发布物：release zip、debug zip、update.json、changelog.md。
           # changelog.md 必须作为 asset：管理器的 update.json 里 changelog 字段指向
           # releases/latest/download/changelog.md，靠它把更新日志展示给用户。
           files: |
             dist/OPlusKey-*.zip
             dist/update.json
-            changelog.md
+            dist/changelog.md
