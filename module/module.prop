@@ -1,7 +1,7 @@
 id=OPlusKey
 name=OPlusKey
-version=v1.0.0
-versionCode=100000
+version=v1.1.0
+versionCode=101000
 author=lookie
 description=一加 Plus Key / 侧键重映射，支持单击、双击、长按与振动反馈
 webuiIcon=launcher.png
