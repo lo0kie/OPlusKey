@@ -1,0 +1,164 @@
+name: build
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    # 纯文档改动不跑构建
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+  workflow_dispatch:
+
+# 同一分支的重复推送只保留最新一次
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 类型检查单独一步：PR 上先在十几秒内失败，不必等 NDK
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # 版本校验：version 与 versionCode 是否自洽、changelog/<version>.md 是否就位
+      # 发版不依赖 git tag，版本号在 module/module.prop 里手动维护
+      - name: Check version
+        run: pnpm ci:version
+
+      - name: Shell syntax check
+        run: |
+          for f in module/*.sh; do
+            bash -n "$f" || { echo "::error file=$f::shell 语法错误"; exit 1; }
+          done
+
+  build:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Android SDK + NDK（build:daemon 交叉编译用）
+      - uses: android-actions/setup-android@v4
+
+      # NDK 版本只在 scripts/toolchain.json 里定义，本地 build:daemon 读的是同一份
+      - name: Read toolchain versions
+        id: tc
+        run: |
+          echo "ndk=$(node -p "require('./scripts/toolchain.json').ndkVersion")" >> "$GITHUB_OUTPUT"
+          echo "sdk=${ANDROID_SDK_ROOT:-$ANDROID_HOME}" >> "$GITHUB_OUTPUT"
+
+      # NDK 解包约 500MB，按版本缓存；命中时省掉 1~2 分钟
+      - name: Cache NDK
+        id: ndk-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.tc.outputs.sdk }}/ndk/${{ steps.tc.outputs.ndk }}
+          key: ndk-${{ runner.os }}-${{ steps.tc.outputs.ndk }}
+
+      - name: Install NDK
+        if: steps.ndk-cache.outputs.cache-hit != 'true'
+        run: sdkmanager --install "ndk;${{ steps.tc.outputs.ndk }}" > /dev/null
+
+      - name: Export NDK path
+        run: echo "ANDROID_NDK_HOME=${{ steps.tc.outputs.sdk }}/ndk/${{ steps.tc.outputs.ndk }}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ---- release 变体：无日志，WebUI 调试面板已剔除，参与自动更新 ----
+      # 编译 daemon + 构建 WebUI + 打包 一条龙，daemon 与 WebUI 不可能不同步
+      # --strict：缺 daemon 或 daemon 比源码旧时直接失败，
+      # 不允许静默产出一个装上不工作的模块
+      - name: Build release module
+        run: pnpm pack:module -- --strict
+
+      # ---- debug 变体：含日志与 WebUI 调试面板，仅供自用，不参与自动更新 ----
+      - name: Build debug module
+        run: pnpm pack:module:debug -- --strict
+
+      # 生成管理器要的两个文件（版本号都取自 module.prop）：
+      #   update.json   —— 自动更新元数据（Magisk ModuleJson 协议）
+      #   changelog.md  —— 由 changelog/ 下的分版本 markdown 拼成，管理器会把它
+      #                    抓下来渲染进更新对话框，所以必须以 asset 形式提供
+      - name: Generate update.json & changelog.md
+        run: |
+          pnpm ci:changelog
+          pnpm ci:update-json
+
+      # Release 放四样：两个 zip + update.json + changelog.md
+      - name: Upload release payload
+        uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: |
+            dist/OPlusKey-*.zip
+            dist/update.json
+            changelog.md
+          retention-days: 7
+
+  # 推送到 master/main 即发版，版本号取自 module.prop
+  release:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: dist
+
+      - name: Resolve version for release
+        id: ver
+        run: |
+          # 版本号从打包产物名推导：dist/OPlusKey-v<版本>.zip（排除 debug 包）
+          f=$(ls dist/OPlusKey-v*.zip | grep -v -- '-debug' | head -1)
+          ver=$(basename "$f" .zip | sed 's/^OPlusKey-//')
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "解析到版本：$ver"
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # 每次推送都发一版，用版本号做 tag
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: ${{ steps.ver.outputs.version }}
+          # Release 说明栏用生成的 changelog，避免正文空白
+          body_path: changelog.md
+          # 四样发布物：release zip、debug zip、update.json、changelog.md。
+          # changelog.md 必须作为 asset：管理器的 update.json 里 changelog 字段指向
+          # releases/latest/download/changelog.md，靠它把更新日志展示给用户。
+          files: |
+            dist/OPlusKey-*.zip
+            dist/update.json
+            changelog.md

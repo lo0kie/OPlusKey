@@ -1,0 +1,5 @@
+# 模块内会被设备直接执行的脚本必须保持 LF：
+# CRLF 会让 shebang 变成 "#!/system/bin/sh\r"，字符串比较也会带上 \r 而恒不相等
+module/*.sh text eol=lf
+module/META-INF/com/google/android/update-binary text eol=lf
+module/META-INF/com/google/android/updater-script text eol=lf

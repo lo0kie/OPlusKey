@@ -1,0 +1,32 @@
+{
+  "name": "opluskey-webui",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.20.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:debug": "tsc --noEmit && vite build --mode debug",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview",
+    "pack:module": "pnpm build && node scripts/build-native.mjs && node scripts/pack.mjs",
+    "pack:module:debug": "pnpm build:debug && node scripts/build-native.mjs -- --debug && node scripts/pack.mjs -- --debug",
+    "build:daemon": "node scripts/build-native.mjs",
+    "build:daemon:debug": "node scripts/build-native.mjs -- --debug",
+    "ci:version": "node scripts/ci-version.mjs",
+    "ci:changelog": "node scripts/ci-changelog.mjs",
+    "ci:update-json": "node scripts/ci-update-json.mjs"
+  },
+  "dependencies": {
+    "@material/material-color-utilities": "^0.3.0"
+  },
+  "devDependencies": {
+    "archiver": "^8.0.0",
+    "sharp": "^0.35.4",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.8",
+    "vite-plugin-minify": "^3.0.0",
+    "vite-plugin-singlefile": "^2.0.2"
+  }
+}
